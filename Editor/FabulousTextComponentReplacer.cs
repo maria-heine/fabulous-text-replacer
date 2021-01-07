@@ -80,8 +80,8 @@ namespace ZulaMobile.EditorTools
             foldout.Add(scrollview);
 
             StringBuilder stringbuilder = new StringBuilder();
-            string final = "";
             int count = 0;
+            int textCount = 0;
 
             for (int i = 0; i < assets.Length; i++)
             {
@@ -96,52 +96,21 @@ namespace ZulaMobile.EditorTools
 
                         if (textChildren.Length > 0)
                         {
-                            stringbuilder.Append($"c: {go.name} cc: {go.gameObject.transform.hierarchyCount} \n");
+                            stringbuilder.Append($"c: {go.name} cc: {go.gameObject.transform.hierarchyCount} tc: {textChildren.Length} \n");
                             count++;
+                            textCount += textChildren.Length;
                             continue;
                         }
                     }
-                    else if (topAsset is RectTransform rect)
-                    {
-                        //var objPreview = new ObjectField { objectType = typeof(GameObject) };
-                        //objPreview.SetValueWithoutNotify(rect);
-                        stringbuilder.Append($"RectTransform {rect.name} child count: {rect.gameObject.transform.hierarchyCount} \n");
-                        count++;
-                        continue;
-                    }
                 }
                 catch (Exception) {/* I don't care about those two ghostly objects that exist and yet they don't */ }
-
-                //topAsset = AssetDatabase.LoadAssetAtPath(objectsPath, typeof(RectTransform));
-                //try
-                //{
-                //    if (topAsset is RectTransform rect)
-                //    {
-                //        //var objPreview = new ObjectField { objectType = typeof(GameObject) };
-                //        //objPreview.SetValueWithoutNotify(rect);
-                //        stringbuilder.Append($"RectTransform {rect.name} child count: {rect.gameObject.transform.hierarchyCount} \n");
-                //        count++;
-                //        continue;
-                //    }
-                //}
-                //catch (Exception) { }
-
-                topAsset = AssetDatabase.LoadAssetAtPath(objectsPath, typeof(GameObject));
-                try
-                {
-                    if (topAsset is GameObject go)
-                    {
-                        stringbuilder.Append($"gameobject {go.name} child count: {go.gameObject.transform.hierarchyCount} \n");
-                        count++;
-                    }
-                }
-                catch (Exception) { }
             }
 
             var resources = Resources.FindObjectsOfTypeAll(typeof(Component)) as Component[];
             Debug.Log($"resources: {resources.Length}");
 
             stringbuilder.Append($"\n count: {count.ToString()}");
+            stringbuilder.Append($"\n text count: {textCount.ToString()}");
 
             var textElement = new TextElement() { text = stringbuilder.ToString() };
             scrollview.Add(textElement);
