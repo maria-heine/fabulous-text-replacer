@@ -14,6 +14,9 @@ namespace ZulaMobile.EditorTools
 {
     public class FabulousTextComponentReplacer : EditorWindow
     {
+        // const string SEARCH_DIRECTORY = "Assets/RemoteAssets";
+        const string SEARCH_DIRECTORY = "Assets/Original";
+
         // Note: The characters _%#T at the end of the MenuItem string lets us add a shortcut to open the window, which is here CTRL + SHIFT + T.
         [MenuItem("Window/Zula Mobile/Fabulous Text Component Replacer _%#T")]
         public static void ShowWindow()
@@ -33,12 +36,14 @@ namespace ZulaMobile.EditorTools
             // Reference to the root of the window
             var root = rootVisualElement;
 
-            var assets = AssetDatabase.FindAssets("t:Object", new[] { "Assets/RemoteAssets" });
-           
+            var assets = AssetDatabase.FindAssets("t:Object", new[] { SEARCH_DIRECTORY });
+
             DrawTestTextReplacer(root);
 
-            var loadAllAssetsListButton = new Button(() => ListAllFoundAssets(root, assets)) { text = "Load All Assets List" };
-            var listOnlyTopAssetsButton = new Button(() => ListOnlyTopAssets(root, assets)) { text = "Load Only Top Assets" };
+            var loadAllAssetsListButton = new Button(() => ListAllFoundAssets(root, assets))
+            { text = "Load All Assets List" };
+            var listOnlyTopAssetsButton = new Button(() => ListOnlyTopAssets(root, assets))
+            { text = "Load Only Top Assets" };
 
             root.Add(loadAllAssetsListButton);
             root.Add(listOnlyTopAssetsButton);
@@ -54,7 +59,8 @@ namespace ZulaMobile.EditorTools
             var objPreview = new ObjectField { objectType = typeof(RectTransform) };
             root.Add(objPreview);
 
-            var domagicbutton = new Button(() => {
+            var domagicbutton = new Button(() =>
+            {
                 RectTransform loadedAsset = (RectTransform)AssetDatabase.LoadAssetAtPath(testAsset, typeof(RectTransform));
                 var text = loadedAsset.GetComponentInChildren<Text>();
                 loadedAsset.gameObject.AddComponent<Dropdown>();
@@ -103,7 +109,8 @@ namespace ZulaMobile.EditorTools
                         count++;
                         continue;
                     }
-                } catch (Exception) {/* I don't care about those two ghostly objects that exist and yet they don't */ }
+                }
+                catch (Exception) {/* I don't care about those two ghostly objects that exist and yet they don't */ }
 
                 //topAsset = AssetDatabase.LoadAssetAtPath(objectsPath, typeof(RectTransform));
                 //try
