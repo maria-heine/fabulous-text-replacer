@@ -17,6 +17,9 @@ namespace ZulaMobile.EditorTools
         // const string SEARCH_DIRECTORY = "Assets/RemoteAssets";
         const string SEARCH_DIRECTORY = "Assets/Original";
 
+        TextField textField;
+        Box boxDisplayer;
+
         // Note: The characters _%#T at the end of the MenuItem string lets us add a shortcut to open the window, which is here CTRL + SHIFT + T.
         [MenuItem("Window/Zula Mobile/Fabulous Text Component Replacer _%#T")]
         public static void ShowWindow()
@@ -29,6 +32,52 @@ namespace ZulaMobile.EditorTools
 
             // Sets a minimum size to the window.
             window.minSize = new Vector2(250, 50);
+        }
+
+        private void DisplayInBox(VisualElement toDisplay)
+        {
+            boxDisplayer.Clear();
+            boxDisplayer.Add(toDisplay);
+        }
+
+        private static TextElement GetTextElement(string textToDisplay)
+        {
+            var textElement = new TextElement() { text = textToDisplay };
+            return textElement;
+        }
+
+        public class MultilineStringBuilder
+        {
+            private StringBuilder builder;
+
+            public string GetString => builder.ToString();
+
+            public MultilineStringBuilder()
+            {
+                builder = new StringBuilder();
+            }
+
+            public MultilineStringBuilder(string titleLine)
+            {
+                builder = new StringBuilder();
+                builder.Append(titleLine);
+                AddSeparator();
+            }
+
+            public void AddLine(string line)
+            {
+                builder.Append($"{line} \n");
+            }
+
+            public void AddLine(string[] elements)
+            {
+                builder.Append($"{string.Join("", elements)} \n");
+            }
+
+            public void AddSeparator()
+            {
+                builder.Append($"-------------------------- \n\n");
+            }
         }
 
         private void OnEnable()
@@ -48,6 +97,8 @@ namespace ZulaMobile.EditorTools
             root.Add(loadAllAssetsListButton);
             root.Add(listOnlyTopAssetsButton);
 
+            boxDisplayer = new Box();
+            root.Add(boxDisplayer);
         }
 
         private void DrawTestTextReplacer(VisualElement root)
@@ -58,6 +109,8 @@ namespace ZulaMobile.EditorTools
             root.Add(label);
             var objPreview = new ObjectField { objectType = typeof(RectTransform) };
             root.Add(objPreview);
+            var gameobjPreview = new ObjectField { objectType = typeof(GameObject) };
+            root.Add(gameobjPreview);
 
             var domagicbutton = new Button(() =>
             {
@@ -65,9 +118,48 @@ namespace ZulaMobile.EditorTools
                 var text = loadedAsset.GetComponentInChildren<Text>();
                 loadedAsset.gameObject.AddComponent<Dropdown>();
                 AssetDatabase.SaveAssets();
-            });
+            }) { text = "Do magic button" };
+
+            var analyseprefabbuttin = new Button(() =>
+            {
+                var msb = new MultilineStringBuilder("Prefab analysis");
+
+                // var obj = gameobjPreview.value as GameObject;
+                var obj = (GameObject)AssetDatabase.LoadAssetAtPath("Assets/Original/Prefabs/PrefabbedParentReferencingDeeplyNestedKid.prefab", typeof(GameObject));
+                var instance = (GameObject)PrefabUtility.InstantiatePrefab(obj);
+
+
+                // todo on monday: actually do that thing for all children (and self) of a top prefab object
+                // todo in order to hunt for nested prefabs
+                // todo consider: that would be madness but it is possible that a nested prefab contains a reference to the text component of a parent
+                // todo if nested prefab: dig in
+                // todo if normal text: replace (thats assuming its not referenced somewhere else)
+                foreach (Text t in instance.GetComponentsInChildren<Text>())
+                {
+                    if (PrefabUtility.IsPartOfAnyPrefab(t)) // this will actually always return true in our case
+                    {
+                        var isRoot = PrefabUtility.IsAnyPrefabInstanceRoot(t.gameObject);
+
+                            var componentParent = PrefabUtility.GetNearestPrefabInstanceRoot(t);
+                        if (isRoot)
+                        {
+                            msb.AddLine( new[] { "NESTED ", t.name.ToString(), " parent: ", componentParent is null ? "<<null>>" : componentParent.name, $" is root: {isRoot}" } );
+                        }
+                        else
+                        {
+                            msb.AddLine( new[] { "NOT NESTED ", t.name.ToString(), " parent: ", componentParent is null ? "<<null>>" : componentParent.name, $" is root: {isRoot}" } );
+                        }
+                    }
+                    else
+                    {
+                        msb.AddLine( new[] { t.name.ToString(), " is not prefabbed" } );
+                    }
+                }
+                DisplayInBox(GetTextElement(msb.GetString));
+            }) { text = "Analyse prefab" };
 
             root.Add(domagicbutton);
+            root.Add(analyseprefabbuttin);
         }
 
         private void ListOnlyTopAssets(VisualElement root, string[] assets)
