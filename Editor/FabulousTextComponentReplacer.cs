@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using UnityEditor;
@@ -10,15 +11,24 @@ using UnityEngine.UI;
 using UnityEngine.UIElements;
 using Button = UnityEngine.UIElements.Button;
 
-namespace ZulaMobile.EditorTools
+namespace FabulousReplacer
 {
-    public class FabulousTextComponentReplacer : EditorWindow
+    public partial class FabulousTextComponentReplacer : EditorWindow
     {
         // const string SEARCH_DIRECTORY = "Assets/RemoteAssets";
         const string SEARCH_DIRECTORY = "Assets/Original";
+        const string PREFABS_ORIGINAL_LOCATION = "Assets/Original/Prefabs";
+        const string PREFABS_COPY_LOCATION = "Assets/Copy/Prefabs";
 
         TextField textField;
         Box boxDisplayer;
+
+        List<GameObject> _loadedPrefabs;
+        Dictionary<GameObject, List<GameObject>> _crossPrefabReferences;
+        Dictionary<Type, List<GameObject>> _scriptReferences;
+        Dictionary<GameObject, List<Type>> _scriptsByPrefab;
+        Dictionary<string, string> _scriptCopies;
+        bool isBackupMade;
 
         // Note: The characters _%#T at the end of the MenuItem string lets us add a shortcut to open the window, which is here CTRL + SHIFT + T.
         [MenuItem("Window/Zula Mobile/Fabulous Text Component Replacer _%#T")]
@@ -37,7 +47,9 @@ namespace ZulaMobile.EditorTools
         private void DisplayInBox(VisualElement toDisplay)
         {
             boxDisplayer.Clear();
-            boxDisplayer.Add(toDisplay);
+            var scrollview = new ScrollView();
+            scrollview.Add(toDisplay);
+            boxDisplayer.Add(scrollview);
         }
 
         private static TextElement GetTextElement(string textToDisplay)
@@ -46,48 +58,16 @@ namespace ZulaMobile.EditorTools
             return textElement;
         }
 
-        public class MultilineStringBuilder
-        {
-            private StringBuilder builder;
-
-            public string GetString => builder.ToString();
-
-            public MultilineStringBuilder()
-            {
-                builder = new StringBuilder();
-            }
-
-            public MultilineStringBuilder(string titleLine)
-            {
-                builder = new StringBuilder();
-                builder.Append(titleLine);
-                AddSeparator();
-            }
-
-            public void AddLine(string line)
-            {
-                builder.Append($"{line} \n");
-            }
-
-            public void AddLine(string[] elements)
-            {
-                builder.Append($"{string.Join("", elements)} \n");
-            }
-
-            public void AddSeparator()
-            {
-                builder.Append($"-------------------------- \n\n");
-            }
-        }
-
         private void OnEnable()
         {
             // Reference to the root of the window
             var root = rootVisualElement;
 
-            var assets = AssetDatabase.FindAssets("t:Object", new[] { SEARCH_DIRECTORY });
+            string[] assets = AssetDatabase.FindAssets("t:Object", new[] { SEARCH_DIRECTORY });
 
-            DrawTestTextReplacer(root);
+            DrawInitializeSection(root);
+            DrawTestTextReplacer(root, assets);
+            DrawLoggingButtons(root);
 
             var loadAllAssetsListButton = new Button(() => ListAllFoundAssets(root, assets))
             { text = "Load All Assets List" };
@@ -101,7 +81,174 @@ namespace ZulaMobile.EditorTools
             root.Add(boxDisplayer);
         }
 
-        private void DrawTestTextReplacer(VisualElement root)
+        #region Initialization
+
+        private void DrawInitializeSection(VisualElement root)
+        {
+            var label = new Label() { text = "Initialization" };
+            root.Add(label);
+
+            IntegerField depthSearchIntField = new IntegerField("Prefab Search Depth");
+            depthSearchIntField.value = -1;
+            root.Add(depthSearchIntField);
+
+            ToolbarToggle copiesAndBackupToggle = new ToolbarToggle() { text = "Prepare Copies And Backup", label = "Backup?" };
+            copiesAndBackupToggle.value = true;
+            root.Add(copiesAndBackupToggle);
+
+            Button initializeButton = new Button(() =>
+            {
+                LoadAllPrefabs();
+                FindCrossPrefabReferences(depthSearchIntField.value);
+                FindScriptReferences(depthSearchIntField.value);
+                if (copiesAndBackupToggle.value)
+                {
+                    PrepareCopiesAndBackup();
+                }
+            })
+            { text = "Initialize" };
+
+            root.Add(initializeButton);
+        }
+
+        private void PrepareCopiesAndBackup()
+        {
+            if (isBackupMade)
+            {
+                Debug.Log("Backup already there. Clear first");
+                return;
+            }
+
+            FileUtil.CopyFileOrDirectory(PREFABS_ORIGINAL_LOCATION, PREFABS_COPY_LOCATION);
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
+
+            _scriptCopies = new Dictionary<string, string>();
+
+            // TODO DO THIS RECURSIVELY FOR ZULA, you will need Directory.GetDirectories
+            var files = Directory.GetFiles("Assets/Original/Scripts");
+
+            foreach (var file in files)
+            {
+                if (file.Contains(".cs") && !file.Contains(".meta"))
+                {
+                    try
+                    {
+                        using (var sr = new StreamReader(file))
+                        {
+                            string content = sr.ReadToEnd();
+                            _scriptCopies.Add(file, content);
+                        }
+                    }
+                    catch (IOException e)
+                    {
+                        Debug.LogError("The file could not be read:");
+                        Debug.LogError(e.Message);
+                    }
+                }
+            }
+
+            isBackupMade = true;
+        }
+
+        private void LoadAllPrefabs()
+        {
+            _loadedPrefabs = new List<GameObject>();
+
+            string[] assets = AssetDatabase.FindAssets("t:Object", new[] { SEARCH_DIRECTORY });
+
+            for (int i = 0; i < assets.Length; i++)
+            {
+                string objectsPath = AssetDatabase.GUIDToAssetPath(assets[i]);
+
+                UnityEngine.Object topAsset = AssetDatabase.LoadAssetAtPath(objectsPath, typeof(Component));
+
+                try
+                {
+                    // Since only prefabs in assets will have a component as it's root
+                    if (topAsset is Component c)
+                    {
+                        _loadedPrefabs.Add(c.gameObject);
+                    }
+                }
+                catch (Exception)
+                {
+                    /* Because I don't care about those two unnameable ghostly objects that exist and yet they don't */
+                    Debug.Log($"Prefabl searcher exception for path: {objectsPath}");
+                }
+            }
+        }
+
+        private void FindCrossPrefabReferences(int searchDepth = -1)
+        {
+            int currentDepth = 0;
+
+            _crossPrefabReferences = new Dictionary<GameObject, List<GameObject>>();
+
+            foreach (var rootPrefab in _loadedPrefabs)
+            {
+                if (searchDepth == -1 || currentDepth < searchDepth) currentDepth++;
+                else return;
+
+                var foundNestedPrefabs = new List<GameObject>();
+
+                rootPrefab.CheckHierarchyForNestedPrefabs(foundNestedPrefabs);
+
+                if (foundNestedPrefabs.Count > 0)
+                {
+                    foreach (var nestedPrefab in foundNestedPrefabs)
+                    {
+                        if (!_crossPrefabReferences.ContainsKey(nestedPrefab))
+                        {
+                            _crossPrefabReferences[nestedPrefab] = new List<GameObject>();
+                        }
+
+                        _crossPrefabReferences[nestedPrefab].Add(rootPrefab);
+                    }
+                }
+            }
+        }
+
+        private void FindScriptReferences(int searchDepth = -1)
+        {
+            int currentDepth = 0;
+
+            _scriptReferences = new Dictionary<Type, List<GameObject>>();
+            _scriptsByPrefab = new Dictionary<GameObject, List<Type>>();
+
+            foreach (var prefab in _loadedPrefabs)
+            {
+                if (searchDepth == -1 || currentDepth < searchDepth) currentDepth++;
+                else return;
+
+                var foundScripts = new List<MonoBehaviour>();
+
+                prefab.FindScriptsInHierarchy(foundScripts);
+
+                _scriptsByPrefab[prefab] = foundScripts.Select((instance) => instance.GetType()).ToList();
+
+                if (foundScripts.Count > 0)
+                {
+                    foreach (var mono in foundScripts)
+                    {
+                        Type monoType = mono.GetType();
+
+                        if (!_scriptReferences.ContainsKey(monoType))
+                        {
+                            _scriptReferences[monoType] = new List<GameObject>();
+                        }
+
+                        // todo here, I am not sure of that skip, maybe we could directly save instances to dictionaries
+                        if (_scriptReferences[monoType].Contains(prefab)) continue;
+
+                        _scriptReferences[monoType].Add(prefab);
+                    }
+                }
+            }
+        }
+
+        #endregion // Initialization
+
+        private void DrawTestTextReplacer(VisualElement root, string[] assets)
         {
             string testAsset = "Assets/RemoteAssets/UI/ActionPopups/FriendActionPopupView.prefab";
 
@@ -118,48 +265,279 @@ namespace ZulaMobile.EditorTools
                 var text = loadedAsset.GetComponentInChildren<Text>();
                 loadedAsset.gameObject.AddComponent<Dropdown>();
                 AssetDatabase.SaveAssets();
-            }) { text = "Do magic button" };
+            })
+            { text = "Do magic button" };
 
             var analyseprefabbuttin = new Button(() =>
             {
                 var msb = new MultilineStringBuilder("Prefab analysis");
 
-                // var obj = gameobjPreview.value as GameObject;
-                var obj = (GameObject)AssetDatabase.LoadAssetAtPath("Assets/Original/Prefabs/PrefabbedParentReferencingDeeplyNestedKid.prefab", typeof(GameObject));
-                var instance = (GameObject)PrefabUtility.InstantiatePrefab(obj);
+                // NewMethod(msb);
 
-
-                // todo on monday: actually do that thing for all children (and self) of a top prefab object
-                // todo in order to hunt for nested prefabs
-                // todo consider: that would be madness but it is possible that a nested prefab contains a reference to the text component of a parent
-                // todo if nested prefab: dig in
-                // todo if normal text: replace (thats assuming its not referenced somewhere else)
-                foreach (Text t in instance.GetComponentsInChildren<Text>())
+                foreach (var prefab in _loadedPrefabs)
                 {
-                    if (PrefabUtility.IsPartOfAnyPrefab(t)) // this will actually always return true in our case
-                    {
-                        var isRoot = PrefabUtility.IsAnyPrefabInstanceRoot(t.gameObject);
+                    AnalyzePrefab(prefab, _loadedPrefabs, msb);
+                }
 
-                            var componentParent = PrefabUtility.GetNearestPrefabInstanceRoot(t);
-                        if (isRoot)
+                // foreach (var c in foundPrefabs)
+                // {
+                //     msb.AddLine(c.gameObject.name);
+                // }
+
+
+                DisplayInBox(GetTextElement(msb.ToString()));
+            })
+            { text = "Analyse prefabs" };
+
+            // root.Add(domagicbutton);
+            root.Add(analyseprefabbuttin);
+        }
+
+        #region LOGGING
+
+        private void DrawLoggingButtons(VisualElement root)
+        {
+            var label = new Label() { text = "Logging" };
+            var box = new Box();
+            // box.style.height = StyleKeyword.Auto;
+            root.Add(label);
+            root.Add(box);
+
+            IntegerField loggingDepthField = new IntegerField("Logging Depth");
+            loggingDepthField.value = 30;
+            box.Add(loggingDepthField);
+
+            var logCrossReferences = new Button(() =>
+            {
+                var msb = new MultilineStringBuilder("Log Cross References");
+
+                LogCrossReferences(msb, loggingDepthField.value);
+
+                DisplayInBox(GetTextElement(msb.ToString()));
+            })
+            { text = "Log Cross References" };
+            box.Add(logCrossReferences);
+
+            var logScriptReferencesButton = new Button(() =>
+            {
+                var msb = new MultilineStringBuilder("Log Script References");
+
+                LogScriptReferences(msb, loggingDepthField.value);
+
+                DisplayInBox(GetTextElement(msb.ToString()));
+            })
+            { text = "Log Script References" };
+            box.Add(logScriptReferencesButton);
+        }
+
+        private void LogCrossReferences(MultilineStringBuilder msb, int logDepth = 30)
+        {
+            int depth = 0;
+
+            foreach (var c in _crossPrefabReferences)
+            {
+                msb.AddLine(new[] { "key: ", c.Key.name, " has reference count: ", c.Value.Count.ToString() });
+
+                foreach (var reference in c.Value)
+                {
+                    msb.AddLine(new[] { "---> ", reference.name });
+                }
+
+                if (depth > logDepth) return;
+                depth++;
+            }
+        }
+
+        private void LogScriptReferences(MultilineStringBuilder msb, int logDepth = 30)
+        {
+            int depth = 0;
+
+            foreach (var c in _scriptReferences)
+            {
+                msb.AddLine(new[] { "mono: ", c.Key.Name, " has reference count: ", c.Value.Count.ToString() });
+
+                foreach (var reference in c.Value)
+                {
+                    msb.AddLine(new[] { "---> ", reference.name });
+                }
+
+                if (depth > logDepth) return;
+                depth++;
+            }
+        }
+
+        #endregion // LOGGING
+
+        private void AnalyzePrefab(GameObject prefab, List<GameObject> foundPrefabs, MultilineStringBuilder msb)
+        {
+            List<Text> foundTextComponents = new List<Text>();
+            List<MonoBehaviour> foundMonobehaviours = new List<MonoBehaviour>();
+
+            CheckForComponent<Text>(prefab, foundTextComponents);
+            CheckForComponentForScripts(prefab, foundMonobehaviours);
+
+            List<string> nestedPrefabs = new List<string>();
+            Dictionary<Text, List<Component>> textReferences = new Dictionary<Text, List<Component>>();
+
+            //* Finding all text components
+            foreach (Transform child in prefab.transform)
+            {
+                bool isRoot = PrefabUtility.IsAnyPrefabInstanceRoot(child.gameObject);
+
+                if (isRoot)
+                {
+                    nestedPrefabs.Add(child.gameObject.name);
+                }
+                else
+                {
+                    CheckForComponent<Text>(child.gameObject, foundTextComponents);
+                    CheckForComponentForScripts(child.gameObject, foundMonobehaviours);
+                }
+            }
+
+            //* Considering simplest case when text component is only referenced within a single prefabvb
+            foreach (Text text in foundTextComponents)
+            {
+                foreach (Type monoType in _scriptsByPrefab[prefab.AsOriginalPrefab()])
+                {
+                    // todo handle situation when such component is used multiple times
+                    Component component = prefab.GetComponentInChildren(monoType, true);
+
+                    if (component.IsReferencingComponent(text))
+                    {
+                        if (textReferences.ContainsKey(text) == false)
                         {
-                            msb.AddLine( new[] { "NESTED ", t.name.ToString(), " parent: ", componentParent is null ? "<<null>>" : componentParent.name, $" is root: {isRoot}" } );
+                            textReferences[text] = new List<Component>();
                         }
-                        else
-                        {
-                            msb.AddLine( new[] { "NOT NESTED ", t.name.ToString(), " parent: ", componentParent is null ? "<<null>>" : componentParent.name, $" is root: {isRoot}" } );
-                        }
+
+                        textReferences[text].Add(component);
+                    }
+                }
+            }
+
+            msb.AddLine($"Analysis of {prefab.name}");
+            if (nestedPrefabs.Count > 0)
+            {
+                msb.AddLine($"Has nested prefabs:");
+                foreach (var n in nestedPrefabs)
+                {
+                    msb.AddLine($"---> {n}");
+                }
+            }
+            if (foundTextComponents.Count > 0)
+            {
+                msb.AddLine($"Has text components:");
+                foreach (var n in foundTextComponents)
+                {
+                    msb.AddLine($"---> {n.gameObject}");
+                }
+            }
+            if (foundMonobehaviours.Count > 0)
+            {
+                msb.AddLine($"Has custom monobehaviours:");
+                foreach (Type monoType in _scriptsByPrefab[prefab.AsOriginalPrefab()])
+                {
+                    msb.AddLine($"---> {monoType.Name}");
+                }
+            }
+            if (textReferences.Count > 0)
+            {
+                msb.AddLine($"Has text references:");
+                foreach (var kvp in textReferences)
+                {
+                    msb.AddLine($"---> {kvp.Key} is referenced at:");
+                    foreach (var fukkkk in kvp.Value)
+                    {
+                        msb.AddLine($"------> {fukkkk} has reference to");
+                    }
+                }
+            }
+            msb.AddSeparator();
+        }
+
+        // todo trahs tremove
+        private static void NewMethod(MultilineStringBuilder msb)
+        {
+            // var obj = gameobjPreview.value as GameObject;
+            var obj = (GameObject)AssetDatabase.LoadAssetAtPath("Assets/Original/Prefabs/PrefabbedParentReferencingDeeplyNestedKid.prefab", typeof(GameObject));
+            var instance = (GameObject)PrefabUtility.InstantiatePrefab(obj);
+
+            // List<Text> foundTextComponents = new List<Text>();
+            // List<MonoBehaviour> foundMonobehaviours = new List<MonoBehaviour>();
+
+            // CheckForComponent<Text>(instance.transform, foundTextComponents);
+            // CheckForComponent<MonoBehaviour>(instance.transform, foundMonobehaviours);
+
+            // foreach (Transform child in instance.transform)
+            // {
+            //     bool isRoot = PrefabUtility.IsAnyPrefabInstanceRoot(child.gameObject);
+
+            //     if (isRoot)
+            //     {
+
+            //     }
+            //     else
+            //     {
+            //         CheckForComponent<Text>(child, foundTextComponents);
+            //         CheckForComponentForScripts(child.gameObject, foundMonobehaviours);
+            //     }
+            // }
+
+            // todo on monday: actually do that thing for all children (and self) of a top prefab object
+            // todo in order to hunt for nested prefabs
+            // todo consider: that would be madness but it is possible that a nested prefab contains a reference to the text component of a parent
+            // todo if nested prefab: dig in
+            // todo if normal text: replace (thats assuming its not referenced somewhere else)
+            foreach (Text t in instance.GetComponentsInChildren<Text>())
+            {
+                if (PrefabUtility.IsPartOfAnyPrefab(t)) // this will actually always return true in our case
+                {
+                    var isRoot = PrefabUtility.IsAnyPrefabInstanceRoot(t.gameObject);
+
+                    var componentParent = PrefabUtility.GetNearestPrefabInstanceRoot(t);
+                    if (isRoot)
+                    {
+                        msb.AddLine(new[] { "NESTED ", t.name.ToString(), " parent: ", componentParent is null ? "<<null>>" : componentParent.name, $" is root: {isRoot}" });
                     }
                     else
                     {
-                        msb.AddLine( new[] { t.name.ToString(), " is not prefabbed" } );
+                        msb.AddLine(new[] { "NOT NESTED ", t.name.ToString(), " parent: ", componentParent is null ? "<<null>>" : componentParent.name, $" is root: {isRoot}" });
                     }
                 }
-                DisplayInBox(GetTextElement(msb.GetString));
-            }) { text = "Analyse prefab" };
+                else
+                {
+                    msb.AddLine(new[] { t.name.ToString(), " is not prefabbed" });
+                }
+            }
+        }
 
-            root.Add(domagicbutton);
-            root.Add(analyseprefabbuttin);
+        private static bool CheckForComponent<T>(GameObject go, List<T> foundT) where T : Component
+        {
+            bool foundSometing = false;
+
+            if (go.TryGetComponent<T>(out T component))
+            {
+                foundT.Add(component);
+                foundSometing = true;
+            }
+
+            return foundSometing;
+        }
+
+        private static bool CheckForComponentForScripts(GameObject go, List<MonoBehaviour> foundScripts)
+        {
+            bool foundSometing = false;
+
+            go.GetComponents<MonoBehaviour>().ToList().ForEach((mono) =>
+            {
+                if (mono.GetType().Namespace.Contains("UnityEngine") == false)
+                {
+                    foundScripts.Add(mono);
+                    foundSometing = true;
+                }
+            });
+
+            return foundSometing;
         }
 
         private void ListOnlyTopAssets(VisualElement root, string[] assets)

@@ -53,9 +53,11 @@ Cases:
   - [.] Substitute Text with TextMeshPro
   - [.] Save reference to the new TextMeshPro
   - [.] Save prefab
-- Nested prefab is Text
-  - [.] Search for all other places where that nested prefab is used
-- Text is a child of a nested prefab
+- [.] GameObject is a nested prefab
+  - That will require finding all other prefabs referencing that prefab.
+  - Nested prefab is Text
+    - [.] Search for all other places where that nested prefab is used
+  - Text is a child of a nested prefab
 
 ## other things
 
