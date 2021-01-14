@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using UnityEditor;
 using UnityEditor.UIElements;
@@ -15,8 +16,12 @@ namespace FabulousReplacer
 {
     public partial class FabulousTextComponentReplacer : EditorWindow
     {
-        // const string SEARCH_DIRECTORY = "Assets/RemoteAssets";
         const string SEARCH_DIRECTORY = "Assets/Original";
+        /*
+        ! Note that "Assets/Original/Prefabs"
+        ! is entirely different than "Assets/Original/Prefabs/"
+        ! find the difference
+        */
         const string PREFABS_ORIGINAL_LOCATION = "Assets/Original/Prefabs";
         const string PREFABS_COPY_LOCATION = "Assets/Copy/Prefabs";
 
@@ -69,18 +74,65 @@ namespace FabulousReplacer
             DrawTestTextReplacer(root, assets);
             DrawLoggingButtons(root);
 
-            var loadAllAssetsListButton = new Button(() => ListAllFoundAssets(root, assets))
-            { text = "Load All Assets List" };
-            var listOnlyTopAssetsButton = new Button(() => ListOnlyTopAssets(root, assets))
-            { text = "Load Only Top Assets" };
+            // var loadAllAssetsListButton = new Button(() => ListAllFoundAssets(root, assets))
+            // { text = "Load All Assets List" };
+            // var listOnlyTopAssetsButton = new Button(() => ListOnlyTopAssets(root, assets))
+            // { text = "Load Only Top Assets" };
 
-            root.Add(loadAllAssetsListButton);
-            root.Add(listOnlyTopAssetsButton);
+            // root.Add(loadAllAssetsListButton);
+            // root.Add(listOnlyTopAssetsButton);
 
             boxDisplayer = new Box();
             root.Add(boxDisplayer);
         }
 
+        private void DrawTestTextReplacer(VisualElement root, string[] assets)
+        {
+            string testAsset = "Assets/RemoteAssets/UI/ActionPopups/FriendActionPopupView.prefab";
+
+            var label = new Label() { text = "Test Replacer" };
+            root.Add(label);
+            var objPreview = new ObjectField { objectType = typeof(RectTransform) };
+            root.Add(objPreview);
+            var gameobjPreview = new ObjectField { objectType = typeof(GameObject) };
+            root.Add(gameobjPreview);
+
+            var domagicbutton = new Button(() =>
+            {
+                RectTransform loadedAsset = (RectTransform)AssetDatabase.LoadAssetAtPath(testAsset, typeof(RectTransform));
+                var text = loadedAsset.GetComponentInChildren<Text>();
+                loadedAsset.gameObject.AddComponent<Dropdown>();
+                AssetDatabase.SaveAssets();
+            })
+            { text = "Do magic button" };
+
+            var analyseprefabbuttin = new Button(() =>
+            {
+                var msb = new MultilineStringBuilder("Prefab analysis");
+
+                foreach (var prefab in _loadedPrefabs)
+                {
+                    AnalyzePrefab(prefab, _loadedPrefabs, msb);
+                }
+
+                DisplayInBox(GetTextElement(msb.ToString()));
+            })
+            { text = "Analyse prefabs" };
+
+            var clearBackupButton = new Button(() =>
+            {
+                ClearAndRevertBackup();
+            })
+            { text = "Clear backup" };
+            root.Add(clearBackupButton);
+
+            // root.Add(domagicbutton);
+            root.Add(analyseprefabbuttin);
+        }
+
+        //
+        // ─── INITIALIZATION ─────────────────────────────────────────────────────────────
+        //
         #region Initialization
 
         private void DrawInitializeSection(VisualElement root)
@@ -98,13 +150,17 @@ namespace FabulousReplacer
 
             Button initializeButton = new Button(() =>
             {
-                LoadAllPrefabs();
-                FindCrossPrefabReferences(depthSearchIntField.value);
-                FindScriptReferences(depthSearchIntField.value);
                 if (copiesAndBackupToggle.value)
                 {
                     PrepareCopiesAndBackup();
                 }
+
+                //* Where to search for prefabs (depending on whether we make a backup or not)
+                Debug.Log(isBackupMade);
+                string prefabSearchDirectory = isBackupMade ? PREFABS_COPY_LOCATION : SEARCH_DIRECTORY;
+                LoadAllPrefabs(prefabSearchDirectory);
+                FindCrossPrefabReferences(depthSearchIntField.value);
+                FindScriptReferences(depthSearchIntField.value);
             })
             { text = "Initialize" };
 
@@ -113,19 +169,40 @@ namespace FabulousReplacer
 
         private void PrepareCopiesAndBackup()
         {
-            if (isBackupMade)
+            ClearAndRevertBackup();
+
+            // foreach (var ass)
+            // AssetDatabase.FindAssets()
+            // AssetDatabase.CopyAsset()
+            // AssetDatabase.
+
+            string path = AssetDatabase.GUIDToAssetPath( PREFABS_ORIGINAL_LOCATION );
+            string[] assetsToCopy = AssetDatabase.FindAssets("", path);
+            Debug.Log(assetsToCopy.Length);
+
+            foreach (var asset in assetsToCopy)
             {
-                Debug.Log("Backup already there. Clear first");
-                return;
+                AssetDatabase.CopyAsset(asset, PREFABS_COPY_LOCATION);
             }
 
+            // todo you cant copyyyy like that baby
+            // ! delete that file util thingy
             FileUtil.CopyFileOrDirectory(PREFABS_ORIGINAL_LOCATION, PREFABS_COPY_LOCATION);
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
 
             _scriptCopies = new Dictionary<string, string>();
 
-            // TODO DO THIS RECURSIVELY FOR ZULA, you will need Directory.GetDirectories
-            var files = Directory.GetFiles("Assets/Original/Scripts");
+            //* Handle script backups
+            string scriptsRoot = "Assets/Original/Scripts";
+            string[] files = Directory.GetFiles(scriptsRoot);
+
+            string[] directories = Directory.GetDirectories(scriptsRoot, "*", SearchOption.AllDirectories);
+
+            foreach (var dir in directories)
+            {
+                files.Concat(Directory.GetFiles(dir));
+            }
+            // Debug.Log(files.Length);
 
             foreach (var file in files)
             {
@@ -136,6 +213,7 @@ namespace FabulousReplacer
                         using (var sr = new StreamReader(file))
                         {
                             string content = sr.ReadToEnd();
+                            // Debug.Log(content);
                             _scriptCopies.Add(file, content);
                         }
                     }
@@ -150,11 +228,28 @@ namespace FabulousReplacer
             isBackupMade = true;
         }
 
-        private void LoadAllPrefabs()
+        private void ClearAndRevertBackup()
+        {
+            isBackupMade = false;
+
+            if (Directory.Exists(PREFABS_COPY_LOCATION))
+            {
+                //! THIS IS SO UNGODLY ANNOYING, HARDCODING THIS SHTI, JUST DONT USE IT ON DEV
+                //? Oki got this, u must remove a .meta file of a directory before removing that dir
+                //? Then FileUtil works as expected
+                FileUtil.DeleteFileOrDirectory("Assets/Copy/Prefabs.meta"); //! because unity wont let u delete an empty folder while leaving its meta file
+                FileUtil.DeleteFileOrDirectory(PREFABS_COPY_LOCATION); 
+                AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
+            }
+        }
+
+        private void LoadAllPrefabs(string searchLocation)
         {
             _loadedPrefabs = new List<GameObject>();
 
-            string[] assets = AssetDatabase.FindAssets("t:Object", new[] { SEARCH_DIRECTORY });
+            string[] assets = AssetDatabase.FindAssets("t:Object", new[] { searchLocation });
+
+            Debug.Log($"Found {assets.Length} assets.");
 
             for (int i = 0; i < assets.Length; i++)
             {
@@ -189,20 +284,39 @@ namespace FabulousReplacer
                 if (searchDepth == -1 || currentDepth < searchDepth) currentDepth++;
                 else return;
 
-                var foundNestedPrefabs = new List<GameObject>();
+                // var foundNestedPrefabs = new List<GameObject>();
+                // rootPrefab.CheckHierarchyForNestedPrefabs(foundNestedPrefabs);
 
-                rootPrefab.CheckHierarchyForNestedPrefabs(foundNestedPrefabs);
+                var foundNestedPrefabs = rootPrefab.CheckHierarchyForNestedPrefabs();
 
-                if (foundNestedPrefabs.Count > 0)
+                if (foundNestedPrefabs.Count() > 0)
                 {
                     foreach (var nestedPrefab in foundNestedPrefabs)
                     {
-                        if (!_crossPrefabReferences.ContainsKey(nestedPrefab))
+                        //! This has to be done since nested prefabs are separate instances
+                        // Than those we loaded with LoadAllPrefabs
+
+                        var loadedInstance = _loadedPrefabs.FindInstanceOfTheSamePrefab(nestedPrefab);
+
+                        // var nestedPrefabAsOriginal = nestedPrefab.AsOriginalPrefab();
+                        if (loadedInstance == null)
                         {
-                            _crossPrefabReferences[nestedPrefab] = new List<GameObject>();
+                            Debug.LogError($"Failed to find {nestedPrefab.name} in loadedPrefabs");
+                            MultilineStringBuilder msb = new MultilineStringBuilder("hilde");
+                            foreach (var prefab in _loadedPrefabs)
+                            {
+                                msb.AddLine(prefab.name);
+                            }
+                            Debug.Log(msb.ToString());
+                            continue;
                         }
 
-                        _crossPrefabReferences[nestedPrefab].Add(rootPrefab);
+                        if (!_crossPrefabReferences.ContainsKey(loadedInstance))
+                        {
+                            _crossPrefabReferences[loadedInstance] = new List<GameObject>();
+                        }
+
+                        _crossPrefabReferences[loadedInstance].Add(rootPrefab);
                     }
                 }
             }
@@ -248,50 +362,9 @@ namespace FabulousReplacer
 
         #endregion // Initialization
 
-        private void DrawTestTextReplacer(VisualElement root, string[] assets)
-        {
-            string testAsset = "Assets/RemoteAssets/UI/ActionPopups/FriendActionPopupView.prefab";
-
-            var label = new Label() { text = "Test Replacer" };
-            root.Add(label);
-            var objPreview = new ObjectField { objectType = typeof(RectTransform) };
-            root.Add(objPreview);
-            var gameobjPreview = new ObjectField { objectType = typeof(GameObject) };
-            root.Add(gameobjPreview);
-
-            var domagicbutton = new Button(() =>
-            {
-                RectTransform loadedAsset = (RectTransform)AssetDatabase.LoadAssetAtPath(testAsset, typeof(RectTransform));
-                var text = loadedAsset.GetComponentInChildren<Text>();
-                loadedAsset.gameObject.AddComponent<Dropdown>();
-                AssetDatabase.SaveAssets();
-            })
-            { text = "Do magic button" };
-
-            var analyseprefabbuttin = new Button(() =>
-            {
-                var msb = new MultilineStringBuilder("Prefab analysis");
-
-                // NewMethod(msb);
-
-                foreach (var prefab in _loadedPrefabs)
-                {
-                    AnalyzePrefab(prefab, _loadedPrefabs, msb);
-                }
-
-                // foreach (var c in foundPrefabs)
-                // {
-                //     msb.AddLine(c.gameObject.name);
-                // }
-
-
-                DisplayInBox(GetTextElement(msb.ToString()));
-            })
-            { text = "Analyse prefabs" };
-
-            // root.Add(domagicbutton);
-            root.Add(analyseprefabbuttin);
-        }
+        //
+        // ─── LOGGING ────────────────────────────────────────────────────────────────────
+        //
 
         #region LOGGING
 
@@ -333,6 +406,8 @@ namespace FabulousReplacer
         private void LogCrossReferences(MultilineStringBuilder msb, int logDepth = 30)
         {
             int depth = 0;
+
+            Debug.Log(_crossPrefabReferences.Count);
 
             foreach (var c in _crossPrefabReferences)
             {
@@ -386,6 +461,9 @@ namespace FabulousReplacer
 
                 if (isRoot)
                 {
+                    // 1. check for a text component in parent
+                    // 2. search in all prefabs referencing this prefab if they reference that text component aswell
+                    // 3. collect all scripts referencing that text field
                     nestedPrefabs.Add(child.gameObject.name);
                 }
                 else
@@ -395,6 +473,7 @@ namespace FabulousReplacer
                 }
             }
 
+            //! Internal text component references
             //* Considering simplest case when text component is only referenced within a single prefabvb
             foreach (Text text in foundTextComponents)
             {
@@ -411,6 +490,21 @@ namespace FabulousReplacer
                         }
 
                         textReferences[text].Add(component);
+                    }
+                }
+            }
+
+            //todo Test overwwrite some field
+            var tempmonolist = new List<MonoBehaviour>();
+            if (prefab.TryGetScripts(tempmonolist))
+            {
+                foreach (var mono in tempmonolist)
+                {
+                    if (mono.GetType().Name.Contains("PublicField"))
+                    {
+                        Debug.Log($"Found a public field scriptin {prefab.name}");
+                        mono.GetType().GetField("SomeOtherString").SetValue(mono, "yay!");
+                        AssetDatabase.SaveAssets();
                     }
                 }
             }

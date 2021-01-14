@@ -29,7 +29,9 @@ namespace FabulousReplacer
                 Debug.LogError($"{prefabInstance.name} - couldnt find original prefab");
             }
             
-            return PrefabUtility.GetCorrespondingObjectFromOriginalSource(prefabInstance);
+            Debug.Log(AssetDatabase.GetAssetPath(originalPrefab)); 
+            
+            return originalPrefab;
         }
 
         public static bool TryGetScripts(this GameObject go, List<MonoBehaviour> foundScripts)
@@ -57,6 +59,7 @@ namespace FabulousReplacer
 
                 if (isRoot)
                 {
+                    // ! That .AsOriginalPrefab() here is quite misleading, shouldnt be a part of this functin
                     foundNestedPrefabs.Add(child.gameObject.AsOriginalPrefab());
                 }
                 else if (child.childCount > 0)
@@ -64,6 +67,45 @@ namespace FabulousReplacer
                     CheckHierarchyForNestedPrefabs(child.gameObject, foundNestedPrefabs);
                 }
             }
+        }
+
+        // todo and this 
+        public static GameObject FindInstanceOfTheSamePrefab(this IEnumerable<GameObject> collection, GameObject prefabInstance)
+        {
+            foreach (GameObject instance in collection)
+            {
+                if (instance.AsOriginalPrefab() == prefabInstance.AsOriginalPrefab())
+                {
+                    return instance;
+                }
+            }
+            
+            return null;
+        }
+
+        // todo this is fucked
+        public static List<GameObject> CheckHierarchyForNestedPrefabs(this GameObject root)
+        {
+            List<GameObject> collection = new List<GameObject>();
+
+            foreach (Transform child in root.transform)
+            {
+                bool isRoot = PrefabUtility.IsAnyPrefabInstanceRoot(child.gameObject);
+
+                if (isRoot)
+                {
+                    collection.Add(child.gameObject);
+                }
+                else if (child.childCount > 0)
+                {
+                    var nestedCollection = CheckHierarchyForNestedPrefabs(child.gameObject);
+                    collection.AddRange(nestedCollection);
+                }
+            }
+
+            // Debug.Log(collection.Count());
+
+            return collection;
         }
 
         public static void FindScriptsInHierarchy(this GameObject root, List<MonoBehaviour> foundScripts)
