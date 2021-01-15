@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using UnityEngine;
 
@@ -9,6 +10,35 @@ namespace FabulousReplacer
     public static class ReferenceFinder
     {
         const BindingFlags fieldSearchFlags = BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static;
+
+        private static bool CheckForComponent<T>(GameObject go, List<T> foundT) where T : Component
+        {
+            bool foundSometing = false;
+
+            if (go.TryGetComponent<T>(out T component))
+            {
+                foundT.Add(component);
+                foundSometing = true;
+            }
+
+            return foundSometing;
+        }
+
+        private static bool CheckForComponentForScripts(GameObject go, List<MonoBehaviour> foundScripts)
+        {
+            bool foundSometing = false;
+
+            go.GetComponents<MonoBehaviour>().ToList().ForEach((mono) =>
+            {
+                if (mono.GetType().Namespace.Contains("UnityEngine") == false)
+                {
+                    foundScripts.Add(mono);
+                    foundSometing = true;
+                }
+            });
+
+            return foundSometing;
+        }
 
         public static void SearchForObjectsReferencingComponent<T>(Component[] searchPool, T component) where T : Component
         {
