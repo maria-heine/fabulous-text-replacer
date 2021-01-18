@@ -454,26 +454,6 @@ namespace FabulousReplacer
 
         #endregion // LOGGING
 
-        // private List<Text> FindAllDirectTextComponents(GameObject root)
-        // {
-        //     List<Text> foundTextComponents = new List<Text>();
-
-        //     root.CheckForComponent<Text>(foundTextComponents);
-
-        //     //* Finding all text components
-        //     foreach (Transform child in root.transform)
-        //     {
-        //         bool isRoot = PrefabUtility.IsAnyPrefabInstanceRoot(child.gameObject);
-
-        //         if (!isRoot)
-        //         {
-        //             child.gameObject.CheckForComponent<Text>(foundTextComponents);
-        //         }
-        //     }
-
-        //     return foundTextComponents;
-        // }
-
         private Dictionary<GameObject, List<Text>> GetAllTextInstances(GameObject originalPrefab, Text originalText)
         {
             Dictionary<GameObject, List<Text>> prefabTextInstances = new Dictionary<GameObject, List<Text>>();
@@ -517,7 +497,6 @@ namespace FabulousReplacer
                 msb.AddSeparator();
                 return;
             }
-            // List<Text> foundTextComponents = FindAllDirectTextComponents(prefab);
             // todo Step two check all prefabs referencing this prefab if they refer to one of those text components
             // ? and maybe thats it!
             // ? maybe there is no need to immediately dig into that component's nested prefabs
