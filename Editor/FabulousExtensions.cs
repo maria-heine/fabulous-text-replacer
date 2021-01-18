@@ -9,27 +9,77 @@ namespace FabulousReplacer
 {
     public static class FabulousExtensions
     {
-
-        // todo problem is here wwith how we find GetComponentsInChildren
-        // todo consider replacing the original stucture of _scriptsByPRefab with their instances
-        // Note typesToCheck should be monobehaviours
-        public static void ExtractTextReferences(this GameObject prefab, Text text, IEnumerable<Type> typesToCheck, out List<Component> textReferences)
+        public static bool TryExtractTextReferences(this GameObject prefab, Text text, IEnumerable<MonoBehaviour> monoBehaviourToCheck, out List<Component> textReferences)
         {
             textReferences = new List<Component>();
-            
-            foreach (Type monoType in typesToCheck)
-            {
-                Component[] components = prefab.GetComponentsInChildren(monoType, true);
 
-                foreach (Component component in components)
+            foreach (MonoBehaviour mono in monoBehaviourToCheck)
+            {
+                if (mono.IsReferencingComponent(text))
                 {
-                    if (component.IsReferencingComponent(text))
-                    {
-                        textReferences.Add(component);
-                    }
+                    textReferences.Add(mono);
                 }
             }
+
+            return textReferences.Count > 0;
         }
+
+        //
+        // ─── COMPONENT SEARCHING ─────────────────────────────────────────
+        //
+
+        #region COMPONENT SEARCHING
+
+        public static bool TryGetComponentsInChildren<T>(this GameObject root, out List<T> foundComponents, bool skipNestedPrefabs = true)
+            where T : Component
+        {
+            foundComponents = new List<T>();
+
+            // root.CheckForComponent<T>(foundComponents);
+            foundComponents.AddRange(root.GetComponents<T>());
+
+            foreach (Transform child in root.transform)
+            {
+                if (skipNestedPrefabs)
+                {
+                    bool isRoot = PrefabUtility.IsAnyPrefabInstanceRoot(child.gameObject);
+
+                    if (!isRoot)
+                    {
+                        if (child.gameObject.TryGetComponentsInChildren<T>( out List<T> childrenComponents ))
+                        {
+                            foundComponents.AddRange (childrenComponents);
+                        }
+                    }
+                }
+                else
+                {
+                    throw new NotImplementedException();
+                }
+            }
+
+            return foundComponents.Count > 0;
+        }
+
+        public static bool CheckForComponent<T>(this GameObject go, List<T> foundT) where T : Component
+        {
+            bool foundSometing = false;
+
+            if (go.TryGetComponent<T>(out T component))
+            {
+                foundT.Add(component);
+                foundSometing = true;
+            }
+
+            return foundSometing;
+        }
+
+        #endregion // COMPONENT SEARCHING
+
+        //
+        // ─── PREFAB COMPARISON ───────────────────────────────────────────
+        //
+        #region PREFAB COMPARISON
 
         // Thanks to Stas BZ on stack
         // https://stackoverflow.com/a/42551105/11890269
@@ -68,29 +118,16 @@ namespace FabulousReplacer
             return sameGo.GetComponents<T>()[componentIndex];
         }
 
-        public static bool CheckForComponent<T>(this GameObject go, List<T> foundT) where T : Component
-        {
-            bool foundSometing = false;
-
-            if (go.TryGetComponent<T>(out T component))
-            {
-                foundT.Add(component);
-                foundSometing = true;
-            }
-
-            return foundSometing;
-        }
-
         //* Oki honestly I am not sure when would I use that
         public static GameObject AsOriginalPrefab(this GameObject prefabInstance)
         {
             GameObject originalPrefab = PrefabUtility.GetCorrespondingObjectFromOriginalSource(prefabInstance);
-            
+
             if (originalPrefab == null)
             {
                 Debug.LogError($"{prefabInstance.name} - couldnt find original prefab");
             }
-            
+
             return originalPrefab;
         }
 
@@ -103,7 +140,7 @@ namespace FabulousReplacer
                     return instance;
                 }
             }
-            
+
             return null;
         }
 
@@ -111,6 +148,8 @@ namespace FabulousReplacer
         {
             return instance1.AsOriginalPrefab() == instance2.AsOriginalPrefab();
         }
+
+        #endregion // PREFAB COMPARISON
 
         public static bool TryGetScripts(this GameObject go, List<MonoBehaviour> foundScripts)
         {
@@ -151,18 +190,28 @@ namespace FabulousReplacer
             return collection;
         }
 
-        public static void FindScriptsInHierarchy(this GameObject root, List<MonoBehaviour> foundScripts)
+        public static void FindScriptsInHierarchy(this GameObject root, out List<MonoBehaviour> foundScripts, bool skipNestedPrefabs = true)
         {
+            foundScripts = new List<MonoBehaviour>();
+
             root.TryGetScripts(foundScripts);
 
             foreach (Transform child in root.transform)
             {
-                bool isRoot = PrefabUtility.IsAnyPrefabInstanceRoot(child.gameObject);
-
-                // In this case we are only interested in children which are not nested prefabs
-                if (!isRoot)
+                if (skipNestedPrefabs)
                 {
-                    FindScriptsInHierarchy(child.gameObject, foundScripts);
+                    bool isRoot = PrefabUtility.IsAnyPrefabInstanceRoot(child.gameObject);
+
+                    // In this case we are only interested in children which are not nested prefabs
+                    if (!isRoot)
+                    {
+                        FindScriptsInHierarchy(child.gameObject, out List<MonoBehaviour> childScripts);
+                        foundScripts.AddRange(childScripts);
+                    }
+                }
+                else
+                {
+                    throw new NotImplementedException();
                 }
             }
         }

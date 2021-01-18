@@ -30,6 +30,7 @@ namespace FabulousReplacer
 
         List<GameObject> _loadedPrefabs;
         Dictionary<GameObject, List<GameObject>> _crossPrefabReferences;
+        Dictionary<GameObject, List<MonoBehaviour>> _customMonobehavioursByPrefab;
         Dictionary<GameObject, List<GameObject>> _nestedPrefabs;
         Dictionary<Type, List<GameObject>> _scriptReferences;
         Dictionary<GameObject, List<Type>> _scriptsByPrefab;
@@ -255,8 +256,6 @@ namespace FabulousReplacer
                 UnityEngine.Object topAsset = AssetDatabase.LoadAssetAtPath(objectsPath, typeof(Component));
                 UnityEngine.Object mainAsset = AssetDatabase.LoadMainAssetAtPath(objectsPath);
 
-                // Debug.Log($"{topAsset} and {mainAsset}");
-
                 try
                 {
                     // Since only prefabs in assets will have a component as it's root
@@ -336,16 +335,17 @@ namespace FabulousReplacer
 
             _scriptReferences = new Dictionary<Type, List<GameObject>>();
             _scriptsByPrefab = new Dictionary<GameObject, List<Type>>();
+            _customMonobehavioursByPrefab = new Dictionary<GameObject, List<MonoBehaviour>>();
 
             foreach (var prefab in _loadedPrefabs)
             {
                 if (searchDepth == -1 || currentDepth < searchDepth) currentDepth++;
                 else return;
 
-                var foundScripts = new List<MonoBehaviour>();
+                prefab.FindScriptsInHierarchy(out List<MonoBehaviour> foundScripts);
+                _customMonobehavioursByPrefab[prefab] = foundScripts;
 
-                prefab.FindScriptsInHierarchy(foundScripts);
-
+                // todo drop scripts by pregab
                 _scriptsByPrefab[prefab] = foundScripts.Select((instance) => instance.GetType()).ToList();
 
                 //! If only distinct scripts are interesting:
@@ -454,39 +454,25 @@ namespace FabulousReplacer
 
         #endregion // LOGGING
 
-        private List<Text> FindAllDirectTextComponents(GameObject root)
-        {
-            List<Text> foundTextComponents = new List<Text>();
+        // private List<Text> FindAllDirectTextComponents(GameObject root)
+        // {
+        //     List<Text> foundTextComponents = new List<Text>();
 
-            root.CheckForComponent<Text>(foundTextComponents);
+        //     root.CheckForComponent<Text>(foundTextComponents);
 
-            //* Finding all text components
-            foreach (Transform child in root.transform)
-            {
-                bool isRoot = PrefabUtility.IsAnyPrefabInstanceRoot(child.gameObject);
+        //     //* Finding all text components
+        //     foreach (Transform child in root.transform)
+        //     {
+        //         bool isRoot = PrefabUtility.IsAnyPrefabInstanceRoot(child.gameObject);
 
-                if (isRoot)
-                {
-                    // foreach (var referencer in _crossPrefabReferences[child.gameObject])
-                    // {
-                    //     List<Text> texts = new List<Text>();
-                    //     CheckForComponent<Text>(child.gameObject, texts);
+        //         if (!isRoot)
+        //         {
+        //             child.gameObject.CheckForComponent<Text>(foundTextComponents);
+        //         }
+        //     }
 
-                    // }
-                    // 1. check for a text component in parent
-                    // 2. search in all prefabs referencing this prefab if they reference that text component aswell
-                    // 3. collect all scripts referencing that text field
-                    // nestedPrefabs.Add(child.gameObject.name);
-                }
-                else
-                {
-                    child.gameObject.CheckForComponent<Text>(foundTextComponents);
-                    // CheckForComponentForScripts(child.gameObject, foundMonobehaviours);
-                }
-            }
-
-            return foundTextComponents;
-        }
+        //     return foundTextComponents;
+        // }
 
         private Dictionary<GameObject, List<Text>> GetAllTextInstances(GameObject originalPrefab, Text originalText)
         {
@@ -518,12 +504,20 @@ namespace FabulousReplacer
 
         private void AnalyzePrefab(GameObject prefab, List<GameObject> foundPrefabs, MultilineStringBuilder msb, ref int currentDepth)
         {
+            currentDepth++;
+
             List<string> nestedPrefabs = new List<string>();
             Dictionary<Text, List<Component>> localTextReferencesDictionary = new Dictionary<Text, List<Component>>();
             Dictionary<Text, List<Component>> foreignTextReferencesDictionary = new Dictionary<Text, List<Component>>();
 
             // * Step one
-            List<Text> foundTextComponents = FindAllDirectTextComponents(prefab);
+            if ( ! prefab.TryGetComponentsInChildren<Text>(out List<Text> foundTextComponents, skipNestedPrefabs: true) )
+            {
+                msb.AddLine($"{prefab.name} has no text components");
+                msb.AddSeparator();
+                return;
+            }
+            // List<Text> foundTextComponents = FindAllDirectTextComponents(prefab);
             // todo Step two check all prefabs referencing this prefab if they refer to one of those text components
             // ? and maybe thats it!
             // ? maybe there is no need to immediately dig into that component's nested prefabs
@@ -545,20 +539,24 @@ namespace FabulousReplacer
             {
                 //! Internal text component references
                 //* Considering simplest case when text component is only referenced within a single prefabvb
-                prefab.ExtractTextReferences(text, _scriptsByPrefab[prefab], out List<Component> textReferences);
+                if (prefab.TryExtractTextReferences(text, _customMonobehavioursByPrefab[prefab], out List<Component> textReferences))
+                {
+                    localTextReferencesDictionary[text] = textReferences;
+                }
+                
                 // todo remember to check one time if textReferences are empty,it means the simplest case to just substitute text component with tmpro
-                localTextReferencesDictionary[text] = textReferences;
+                // todo this is because sometimes (though I don't think so they are set by code)
+                // ? but then again, I will not catch that code places and will cause errors, maybe better leave that as is
 
                 //! Foreign text component references
-                // todo handle incorrect self-referencing in DeeplyNestedPrefab
-                // todo handle missing reference to a non-root monobehaviour referencing another text field
-                // todo handle and test above case for prefab-internal actions
                 foreach (var kvp in GetAllTextInstances(prefab, text))
                 {
                     foreach (Text textInstance in kvp.Value)
                     {
-                        kvp.Key.ExtractTextReferences(textInstance, _scriptsByPrefab[kvp.Key], out List<Component> textInstanceReferences);
-                        foreignTextReferencesDictionary.Add(textInstance, textInstanceReferences);
+                        if (kvp.Key.TryExtractTextReferences(textInstance, _customMonobehavioursByPrefab[kvp.Key], out List<Component> textInstanceReferences))
+                        {
+                            foreignTextReferencesDictionary.Add(textInstance, textInstanceReferences);
+                        }
                     }
                 }
             }
