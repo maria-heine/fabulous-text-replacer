@@ -4,11 +4,17 @@ using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.UIElements;
 
 namespace FabulousReplacer
 {
     public static class FabulousExtensions
     {
+        public static TextElement GetTextElement(string textToDisplay)
+        {
+            return new TextElement() { text = textToDisplay };
+        }
+        
         public static bool TryExtractTextReferences(this GameObject prefab, Text text, IEnumerable<MonoBehaviour> monoBehaviourToCheck, out List<Component> textReferences)
         {
             textReferences = new List<Component>();

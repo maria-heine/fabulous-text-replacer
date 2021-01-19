@@ -11,6 +11,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.UIElements;
 using Button = UnityEngine.UIElements.Button;
+using static FabulousReplacer.FabulousExtensions;
 
 namespace FabulousReplacer
 {
@@ -37,6 +38,29 @@ namespace FabulousReplacer
         Dictionary<string, string> _scriptCopies;
         bool isBackupMade;
 
+        Action UpgradeProgressBar;
+
+        private class FabulousReferenceCounter
+        {
+            public int totalTextComponentCount;
+            public int updatedTextComponentCount;
+
+            public int nonReferencedTextComponents;
+            public int locallyReferencedTextComponents;
+            public int foreignlyReferencedTextComponents;
+
+            public void Reset()
+            {
+                updatedTextComponentCount = 0;
+                nonReferencedTextComponents = 0;
+                locallyReferencedTextComponents = 0;
+                foreignlyReferencedTextComponents = 0;
+            }
+        }
+
+        int totalTextComponentCount = 0;
+        int updatedTextComponentCount = 0;
+
         // Note: The characters _%#T at the end of the MenuItem string lets us add a shortcut to open the window, which is here CTRL + SHIFT + T.
         [MenuItem("Window/Zula Mobile/Fabulous Text Component Replacer _%#T")]
         public static void ShowWindow()
@@ -59,37 +83,72 @@ namespace FabulousReplacer
             boxDisplayer.Add(scrollview);
         }
 
-        private static TextElement GetTextElement(string textToDisplay)
-        {
-            var textElement = new TextElement() { text = textToDisplay };
-            return textElement;
-        }
-
         private void OnEnable()
         {
             // Reference to the root of the window
             var root = rootVisualElement;
-
-            string[] assets = AssetDatabase.FindAssets("t:Object", new[] { SEARCH_DIRECTORY });
-
-            DrawInitializeSection(root);
-            DrawTestTextReplacer(root, assets);
-            DrawLoggingButtons(root);
-
+            root.style.flexDirection = FlexDirection.Row;
+            var menuBox = new Box();
+            menuBox.style.alignItems = Align.Stretch;
+            menuBox.style.width = new StyleLength(250f);
+            var dataBox = new Box();
+            root.Add(menuBox);
+            root.Add(dataBox);
             boxDisplayer = new Box();
-            root.Add(boxDisplayer);
+            dataBox.Add(boxDisplayer);
+
+            DrawInitializeSection(menuBox);
+            DrawTestTextReplacer(menuBox);
+            DrawLoggingButtons(menuBox);
+            DrawProgressStatus(menuBox);
         }
 
-        private void DrawTestTextReplacer(VisualElement root, string[] assets)
+        private void DrawProgressStatus(Box menuBox)
         {
+            var container = new Box();
+            menuBox.Add(container);
+
+            var label = new Label() { text = "Progress status" };
+            container.Add(label);
+
+            var totalTextCount = new TextElement();
+            container.Add(totalTextCount);
+
+            var updatedTextCount = new TextElement();
+            updatedTextCount.style.color = Color.green;
+            container.Add(updatedTextCount);
+
+            var missedTextCount = new TextElement();
+            missedTextCount.style.color = Color.red;
+            container.Add(missedTextCount);
+
+            var progressBar = new ProgressBar();
+            progressBar.style.height = new StyleLength(15f);
+            progressBar.title = "Progress";
+            container.Add(progressBar);
+
+            UpgradeProgressBar += () =>
+            {
+                totalTextCount.text = $"Total Text Component Count: {totalTextComponentCount.ToString()}";
+                updatedTextCount.text = $"Updated Component Count: {updatedTextComponentCount.ToString()}";
+                missedTextCount.text = $"Missed Component Count: {(totalTextComponentCount - updatedTextComponentCount).ToString()}";
+                progressBar.value = ((float)updatedTextComponentCount / totalTextComponentCount) * 100f;
+                if (progressBar.value > 90f)
+                {
+                    progressBar.title = "Progress yay! 🍰🐬🦕";
+                }
+            };
+        }
+
+        private void DrawTestTextReplacer(VisualElement root)
+        {
+            var container = new Box();
+            root.Add(container);
+
             string testAsset = "Assets/RemoteAssets/UI/ActionPopups/FriendActionPopupView.prefab";
 
             var label = new Label() { text = "Test Replacer" };
-            root.Add(label);
-            var objPreview = new ObjectField { objectType = typeof(RectTransform) };
-            root.Add(objPreview);
-            var gameobjPreview = new ObjectField { objectType = typeof(GameObject) };
-            root.Add(gameobjPreview);
+            container.Add(label);
 
             var domagicbutton = new Button(() =>
             {
@@ -104,12 +163,16 @@ namespace FabulousReplacer
             {
                 var msb = new MultilineStringBuilder("Prefab analysis");
 
+                updatedTextComponentCount = 0;
+
                 int currentDepth = 0;
                 foreach (var prefab in _loadedPrefabs)
                 {
                     AnalyzePrefab(prefab, _loadedPrefabs, msb, ref currentDepth);
                     currentDepth++;
                 }
+
+                UpgradeProgressBar.Invoke();
 
                 DisplayInBox(GetTextElement(msb.ToString()));
             })
@@ -120,10 +183,8 @@ namespace FabulousReplacer
                 ClearAndRevertBackup();
             })
             { text = "Clear backup" };
-            root.Add(clearBackupButton);
-
-            // root.Add(domagicbutton);
-            root.Add(analyseprefabbuttin);
+            container.Add(clearBackupButton);
+            container.Add(analyseprefabbuttin);
         }
 
         //
@@ -153,11 +214,10 @@ namespace FabulousReplacer
 
                 //* Where to search for prefabs (depending on whether we make a backup or not)
                 // ! Prefab backup abandoned
-                // Debug.Log(isBackupMade);
-                // string prefabSearchDirectory = isBackupMade ? PREFABS_COPY_LOCATION : SEARCH_DIRECTORY;
-                LoadAllPrefabs(SEARCH_DIRECTORY);
+                LoadAllPrefabs();
                 FindCrossPrefabReferences(depthSearchIntField.value);
                 FindScriptReferences(depthSearchIntField.value);
+                UpgradeProgressBar.Invoke();
             })
             { text = "Initialize" };
 
@@ -238,16 +298,19 @@ namespace FabulousReplacer
             }
         }
 
-        private void LoadAllPrefabs(string searchLocation)
+        private void LoadAllPrefabs()
         {
             _loadedPrefabs = new List<GameObject>();
 
             /* 
             * Note: This will count both directories and script files as assets
             */
-            string[] assets = AssetDatabase.FindAssets("t:Object", new[] { searchLocation });
+
+            string[] assets = AssetDatabase.FindAssets("t:Object", new[] { SEARCH_DIRECTORY });
 
             Debug.Log($"Found {assets.Length} assets.");
+
+            totalTextComponentCount = 0;
 
             for (int i = 0; i < assets.Length; i++)
             {
@@ -262,6 +325,9 @@ namespace FabulousReplacer
                     if (topAsset is Component c)
                     {
                         _loadedPrefabs.Add(c.gameObject);
+
+                        // ! Counting all found text components
+                        totalTextComponentCount += c.gameObject.GetComponentsInChildren<Text>(includeInactive: true).Count();
                     }
                 }
                 catch (Exception)
@@ -284,12 +350,6 @@ namespace FabulousReplacer
                 if (searchDepth == -1 || currentDepth < searchDepth) currentDepth++;
                 else return;
 
-                // var foundNestedPrefabs = new List<GameObject>();
-                // rootPrefab.CheckHierarchyForNestedPrefabs(foundNestedPrefabs);
-
-                Debug.Log(rootPrefab);
-
-
                 List<GameObject> foundNestedPrefabs = rootPrefab.CheckHierarchyForNestedPrefabs();
 
                 if (foundNestedPrefabs.Count() > 0)
@@ -305,16 +365,9 @@ namespace FabulousReplacer
 
                         var loadedInstance = _loadedPrefabs.FindInstanceOfTheSamePrefab(nestedPrefab);
 
-                        // var nestedPrefabAsOriginal = nestedPrefab.AsOriginalPrefab();
                         if (loadedInstance == null)
                         {
                             Debug.LogError($"Failed to find {nestedPrefab.name} in loadedPrefabs");
-                            // MultilineStringBuilder msb = new MultilineStringBuilder("hilde");
-                            // foreach (var prefab in _loadedPrefabs)
-                            // {
-                            //     msb.AddLine(prefab.name);
-                            // }
-                            // Debug.Log(msb.ToString());
                             continue;
                         }
 
@@ -383,7 +436,8 @@ namespace FabulousReplacer
         {
             var label = new Label() { text = "Logging" };
             var box = new Box();
-            // box.style.height = StyleKeyword.Auto;
+            box.style.height = StyleKeyword.Auto;
+            box.style.overflow = Overflow.Visible;
             root.Add(label);
             root.Add(box);
 
@@ -487,11 +541,13 @@ namespace FabulousReplacer
             currentDepth++;
 
             List<string> nestedPrefabs = new List<string>();
+            List<TextRefernce> textRefernceList = new List<TextRefernce>();
+
             Dictionary<Text, List<Component>> localTextReferencesDictionary = new Dictionary<Text, List<Component>>();
             Dictionary<Text, List<Component>> foreignTextReferencesDictionary = new Dictionary<Text, List<Component>>();
 
             // * Step one
-            if ( ! prefab.TryGetComponentsInChildren<Text>(out List<Text> foundTextComponents, skipNestedPrefabs: true) )
+            if (!prefab.TryGetComponentsInChildren<Text>(out List<Text> localTextComponents, skipNestedPrefabs: true))
             {
                 msb.AddLine($"{prefab.name} has no text components");
                 msb.AddSeparator();
@@ -514,15 +570,20 @@ namespace FabulousReplacer
 
             // todo I am skipping case when a prefab references a nested prefab of its nested prefab fukk that
 
-            foreach (Text text in foundTextComponents)
+            foreach (Text text in localTextComponents)
             {
+                TextRefernce textRef = new TextRefernce(text);
+                updatedTextComponentCount++;
+
                 //! Internal text component references
                 //* Considering simplest case when text component is only referenced within a single prefabvb
                 if (prefab.TryExtractTextReferences(text, _customMonobehavioursByPrefab[prefab], out List<Component> textReferences))
                 {
                     localTextReferencesDictionary[text] = textReferences;
+                    textRef.SetLocalTextReferences(textReferences);
+                    updatedTextComponentCount++;
                 }
-                
+
                 // todo remember to check one time if textReferences are empty,it means the simplest case to just substitute text component with tmpro
                 // todo this is because sometimes (though I don't think so they are set by code)
                 // ? but then again, I will not catch that code places and will cause errors, maybe better leave that as is
@@ -535,7 +596,13 @@ namespace FabulousReplacer
                         if (kvp.Key.TryExtractTextReferences(textInstance, _customMonobehavioursByPrefab[kvp.Key], out List<Component> textInstanceReferences))
                         {
                             foreignTextReferencesDictionary.Add(textInstance, textInstanceReferences);
+                            textRef.AddForeignTextReference(textInstance, textInstanceReferences);
                         }
+                        else
+                        {
+                            textRef.AddTextInstance(textInstance);
+                        }
+                        updatedTextComponentCount++;
                     }
                 }
             }
@@ -564,10 +631,10 @@ namespace FabulousReplacer
                     msb.AddLine($"---> {n}");
                 }
             }
-            if (foundTextComponents.Count > 0)
+            if (localTextComponents.Count > 0)
             {
                 msb.AddLine($"Has text components:");
-                foreach (var n in foundTextComponents)
+                foreach (var n in localTextComponents)
                 {
                     msb.AddLine($"---> {n.gameObject}");
                 }

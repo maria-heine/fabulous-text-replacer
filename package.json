@@ -1,6 +1,6 @@
 {
   "name": "com.mariaheineboombyte.fabulous-text-replacer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "displayName": "fabulous-text-replacer",
   "description": "A fabulous UI.Text to TMPro.Text-mesh-thing-ui mass replacer",
   "dependencies": {
