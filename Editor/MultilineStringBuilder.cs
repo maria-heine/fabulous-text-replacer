@@ -6,6 +6,8 @@ namespace FabulousReplacer
     {
         private StringBuilder builder;
 
+        public int Length => builder.Length;
+
         public override string ToString()
         {
             return builder.ToString();
@@ -25,12 +27,17 @@ namespace FabulousReplacer
 
         public void AddLine(string line)
         {
+            if (builder.Length > 40000)
+            {
+                return;
+            }
+
             builder.Append($"{line} \n");
         }
 
         public void AddLine(string[] elements)
         {
-            builder.Append($"{string.Join("", elements)} \n");
+            AddLine($"{string.Join("", elements)}");
         }
 
         public void AddSeparator()

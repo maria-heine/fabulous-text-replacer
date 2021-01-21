@@ -14,21 +14,32 @@ namespace FabulousReplacer
         {
             return new TextElement() { text = textToDisplay };
         }
-        
-        public static bool TryExtractTextReferences(this GameObject prefab, Text text, IEnumerable<MonoBehaviour> monoBehaviourToCheck, out List<Component> textReferences)
-        {
-            textReferences = new List<Component>();
 
-            foreach (MonoBehaviour mono in monoBehaviourToCheck)
+        #region NESTED PREFAB SEARCHING
+
+        public static List<GameObject> CheckHierarchyForNestedPrefabs(this GameObject root)
+        {
+            List<GameObject> collection = new List<GameObject>();
+
+            foreach (Transform child in root.transform)
             {
-                if (mono.IsReferencingComponent(text))
+                bool isRoot = PrefabUtility.IsAnyPrefabInstanceRoot(child.gameObject);
+
+                if (isRoot)
                 {
-                    textReferences.Add(mono);
+                    collection.Add(child.gameObject);
+                }
+                else if (child.childCount > 0)
+                {
+                    var nestedCollection = CheckHierarchyForNestedPrefabs(child.gameObject);
+                    collection.AddRange(nestedCollection);
                 }
             }
 
-            return textReferences.Count > 0;
+            return collection;
         }
+
+        #endregion // NESTED PREFAB SEARCHING
 
         //
         // ─── COMPONENT SEARCHING ─────────────────────────────────────────
@@ -92,36 +103,37 @@ namespace FabulousReplacer
         public static T GetSameComponentForDuplicate<T>(GameObject original, T originalC, GameObject duplicate)
             where T : Component
         {
-            // remember hierarchy
-            Stack<int> path = new Stack<int>();
+                // remember hierarchy
+                Stack<int> path = new Stack<int>();
 
-            GameObject g = originalC.gameObject;
-            while (!object.ReferenceEquals(original, g))
-            {
-                path.Push(g.transform.GetSiblingIndex());
-                g = g.transform.parent.gameObject;
-            }
-
-            // repeat hierarchy on duplicated object
-            GameObject sameGo = duplicate;
-            while (path.Count > 0)
-            {
-                sameGo = sameGo.transform.GetChild(path.Pop()).gameObject;
-            }
-
-            //get component index
-            var cc = originalC.gameObject.GetComponents<T>();
-            int componentIndex = -1;
-            for (int i = 0; i < cc.Length; i++)
-            {
-                if (object.ReferenceEquals(originalC, cc[i]))
+                GameObject g = originalC.gameObject;
+                while (!object.ReferenceEquals(original, g))
                 {
-                    componentIndex = i;
-                    break;
+                    path.Push(g.transform.GetSiblingIndex());
+                    g = g.transform.parent.gameObject;
                 }
-            }
 
-            return sameGo.GetComponents<T>()[componentIndex];
+                // repeat hierarchy on duplicated object
+                GameObject sameGo = duplicate;
+                while (path.Count > 0)
+                {
+                    sameGo = sameGo.transform.GetChild(path.Pop()).gameObject;
+                }
+
+                //get component index
+                var cc = originalC.gameObject.GetComponents<T>();
+                int componentIndex = -1;
+                for (int i = 0; i < cc.Length; i++)
+                {
+                    if (object.ReferenceEquals(originalC, cc[i]))
+                    {
+                        componentIndex = i;
+                        break;
+                    }
+                }
+
+                return sameGo.GetComponents<T>()[componentIndex];
+            
         }
 
         //* Oki honestly I am not sure when would I use that
@@ -157,44 +169,7 @@ namespace FabulousReplacer
 
         #endregion // PREFAB COMPARISON
 
-        public static bool TryGetScripts(this GameObject go, List<MonoBehaviour> foundScripts)
-        {
-            bool foundSometing = false;
-
-            go.GetComponents<MonoBehaviour>().ToList().ForEach((mono) =>
-            {
-                // Just to be sure, we don't want to grab original unity components
-                if (mono.GetType().Namespace.Contains("UnityEngine") == false)
-                {
-                    foundScripts.Add(mono);
-                    foundSometing = true;
-                }
-            });
-
-            return foundSometing;
-        }
-
-        public static List<GameObject> CheckHierarchyForNestedPrefabs(this GameObject root)
-        {
-            List<GameObject> collection = new List<GameObject>();
-
-            foreach (Transform child in root.transform)
-            {
-                bool isRoot = PrefabUtility.IsAnyPrefabInstanceRoot(child.gameObject);
-
-                if (isRoot)
-                {
-                    collection.Add(child.gameObject);
-                }
-                else if (child.childCount > 0)
-                {
-                    var nestedCollection = CheckHierarchyForNestedPrefabs(child.gameObject);
-                    collection.AddRange(nestedCollection);
-                }
-            }
-
-            return collection;
-        }
+        #region SCRIPT SEARCHING
 
         public static void FindScriptsInHierarchy(this GameObject root, out List<MonoBehaviour> foundScripts, bool skipNestedPrefabs = true)
         {
@@ -221,5 +196,34 @@ namespace FabulousReplacer
                 }
             }
         }
+
+        public static bool TryGetScripts(this GameObject go, List<MonoBehaviour> foundScripts)
+        {
+            bool foundSometing = false;
+
+            go.GetComponents<MonoBehaviour>().ToList().ForEach((mono) =>
+            {
+                // Just to be sure, we don't want to grab original unity components
+                if (mono != null)
+                {
+                    string monoNamespce = mono.GetType().Namespace;
+
+                    if ((monoNamespce != null && monoNamespce.Contains("UnityEngine")) == false)
+                    {
+                        foundScripts.Add(mono);
+                        foundSometing = true;
+                    }
+                }
+                else
+                {
+                    Debug.LogError($"Mysterious null mono found: {mono}");
+                }
+            });
+
+            return foundSometing;
+        }
+
+        #endregion // SCRIPT SEARCHING
+
     }
 }

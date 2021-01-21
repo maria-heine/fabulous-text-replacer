@@ -20,7 +20,10 @@ namespace FabulousReplacer
 
             public void AddTextInstance(Text textInstance)
             {
-                textInstancesWithoutFoundReferences ??= new List<Text>();
+                if (textInstancesWithoutFoundReferences == null)
+                {
+                    textInstancesWithoutFoundReferences = new List<Text>();
+                }
                 textInstancesWithoutFoundReferences.Add(textInstance);
             }
 
@@ -31,14 +34,28 @@ namespace FabulousReplacer
 
             public void AddLocalTextReference(List<Component> localReferences)
             {
-                localTextReferences ??= new List<Component>();
+                if (localTextReferences == null)
+                {
+                    localTextReferences = new List<Component>();
+                }
                 localTextReferences.AddRange(localReferences);
             }
 
             public void AddForeignTextReference(Text textInstance, List<Component> references)
             {
-                foreignTextReferencesDictionary ??= new Dictionary<Text, List<Component>>();
-                foreignTextReferencesDictionary.Add(textInstance, references);
+                if (foreignTextReferencesDictionary == null)
+                {
+                    foreignTextReferencesDictionary = new Dictionary<Text, List<Component>>();
+                }
+
+                if (!foreignTextReferencesDictionary.ContainsKey(textInstance))
+                {
+                    foreignTextReferencesDictionary.Add(textInstance, references);
+                }
+                else
+                {
+                    foreignTextReferencesDictionary[textInstance].AddRange(references);
+                }
             }
         }
     }

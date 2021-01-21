@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace FabulousReplacer
 {
@@ -11,52 +12,81 @@ namespace FabulousReplacer
     {
         const BindingFlags fieldSearchFlags = BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static;
 
-        private static bool CheckForComponent<T>(GameObject go, List<T> foundT) where T : Component
+        #region PUBLIC
+
+        public static int GetComponentReferenceCount<T>(this MonoBehaviour mono)
+            where T : Component
         {
-            bool foundSometing = false;
+            int referenceCount = 0;
 
-            if (go.TryGetComponent<T>(out T component))
+            FieldInfo[] fields = mono.GetType().GetFields(fieldSearchFlags);
+
+            foreach (FieldInfo field in fields)
             {
-                foundT.Add(component);
-                foundSometing = true;
-            }
-
-            return foundSometing;
-        }
-
-        private static bool CheckForComponentForScripts(GameObject go, List<MonoBehaviour> foundScripts)
-        {
-            bool foundSometing = false;
-
-            go.GetComponents<MonoBehaviour>().ToList().ForEach((mono) =>
-            {
-                if (mono.GetType().Namespace.Contains("UnityEngine") == false)
+                if (field.FieldType.IsArray)
                 {
-                    foundScripts.Add(mono);
-                    foundSometing = true;
-                }
-            });
+                    Array arr = field.GetValue(mono) as Array;
 
-            return foundSometing;
-        }
+                    if (arr == null) continue;
 
-        public static void SearchForObjectsReferencingComponent<T>(Component[] searchPool, T component) where T : Component
-        {
-            foreach (Component c in searchPool)
-            {
-                FieldInfo[] fields = c.GetType().GetFields(fieldSearchFlags);
-
-                foreach (FieldInfo field in fields)
-                {
-                    if (IsFieldReferencingComponent(c, field, component))
+                    foreach (object obj in arr)
                     {
+                        if (obj.GetType() == typeof(T))
+                        {
+                            Debug.Log($"Found an array for {mono}, field {field.Name}");
+                            referenceCount++;
+                        }
+                    }
+                }
+                else if (field.FieldType.IsGenericType && field.FieldType.GetGenericTypeDefinition() == typeof(List<T>))
+                {
+                    Debug.Log($"Found a list for {mono}, field {field.Name}");
 
+                    List<T> list = field.GetValue(mono) as List<T>;
+
+                    if (list == null) continue;
+
+                    foreach (T obj in list)
+                    {
+                        if (obj.GetType() == typeof(T))
+                        {
+                            referenceCount++;
+                        }
+                    }
+                }
+                else if (field.FieldType.IsClass)
+                {
+                    if (field.FieldType == typeof(T))
+                    {
+                        if (field. GetValue(mono) != null)
+                            referenceCount++;
                     }
                 }
             }
+
+            return referenceCount;
         }
 
-        public static bool IsReferencingComponent(this Component thisComponent, Component anotherComponent)
+        public static bool TryExtractTextReferences(this GameObject prefab, Text text, IEnumerable<MonoBehaviour> monoBehaviourToCheck, out List<Component> textReferences)
+        {
+            textReferences = new List<Component>();
+
+            foreach (MonoBehaviour mono in monoBehaviourToCheck)
+            {
+                if (mono.IsReferencingComponent(text))
+                {
+                    textReferences.Add(mono);
+                }
+            }
+
+            return textReferences.Count > 0;
+        }
+
+        #endregion // PUBLIC
+
+        #region PRIVATE
+
+        private static bool IsReferencingComponent(this Component thisComponent, Component anotherComponent)
         {
             FieldInfo[] fields = thisComponent.GetType().GetFields(fieldSearchFlags);
 
@@ -71,13 +101,21 @@ namespace FabulousReplacer
             return false;
         }
 
-        private static bool IsFieldReferencingComponent<T>(Component instance, FieldInfo field, T component) where T : Component
+        private static bool IsFieldReferencingComponent<T>(T instance, FieldInfo field, T component) where T : Component
         {
+            _ = component != null ? component : throw new ArgumentNullException(nameof(component));
+            _ = instance != null ? instance : throw new ArgumentNullException(nameof(instance));
+            _ = field ?? throw new ArgumentNullException(nameof(field));
+
             if (field.FieldType.IsArray)
             {
-                var arr = field.GetValue(instance) as Array;
+                Array arr = field.GetValue(instance) as Array;
 
-                CheckEnumerableField(arr);
+                if (arr == null) 
+                {
+                    Debug.LogError($"array null {field} for {instance.GetType()}");
+                    return false;
+                }
 
                 foreach (object obj in arr)
                 {
@@ -91,9 +129,17 @@ namespace FabulousReplacer
             else if (field.FieldType.IsGenericType && field.FieldType.GetGenericTypeDefinition() == typeof(List<T>))
             {
                 // todo Really doubting if this would work, not sure either if we have some lists of Text component
-                var arr = field.GetValue(instance) as List<T>;
+                List<T> list = field.GetValue(instance) as List<T>;
 
-                CheckEnumerableField(arr);
+                if (list == null) return false;
+
+                foreach (T obj in list)
+                {
+                    if (obj != null && component != null && obj.GetType() == component.GetType())
+                    {
+                        if (obj == component) return true;
+                    }
+                }
             }
             else if (field.FieldType.IsClass)
             {
@@ -107,9 +153,6 @@ namespace FabulousReplacer
             return false;
         }
 
-        private static bool CheckEnumerableField(IEnumerable enumerable)
-        {
-            return false;
-        }
+        #endregion // PRIVATE 
     }
 }
