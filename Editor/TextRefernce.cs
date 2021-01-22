@@ -8,17 +8,19 @@ namespace FabulousReplacer
     {
         private class TextRefernce
         {
-            Text originalPrefabText;
-            List<Text> textInstancesWithoutFoundReferences;
-            List<Component> localTextReferences;
-            Dictionary<Text, List<Component>> foreignTextReferencesDictionary;
+            public Text originalPrefabText { get; private set; }
+            public List<Text> textInstancesWithoutFoundReferences { get; private set; }
+            public List<Component> localTextReferences { get; private set; }
+            public Dictionary<Text, List<Component>> foreignTextReferencesDictionary { get; private set; }
+            //public IEnumerable<Component> LocalTextReferences => localTextReferences;
 
             public TextRefernce(Text originalPrefabText)
             {
                 this.originalPrefabText = originalPrefabText;
             }
 
-            public void AddTextInstance(Text textInstance)
+            // ! This could also just mean reference not found
+            public void AddUnreferencedTextInstance(Text textInstance)
             {
                 if (textInstancesWithoutFoundReferences == null)
                 {
@@ -38,6 +40,7 @@ namespace FabulousReplacer
                 {
                     localTextReferences = new List<Component>();
                 }
+
                 localTextReferences.AddRange(localReferences);
             }
 

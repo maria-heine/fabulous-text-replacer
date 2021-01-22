@@ -578,35 +578,24 @@ namespace FabulousReplacer
 
         private void AnalyzePrefab(GameObject prefab, List<GameObject> foundPrefabs, MultilineStringBuilder msb, ref int currentDepth)
         {
-            currentDepth++;
-
-            List<string> nestedPrefabs = new List<string>();
-
-            Dictionary<Text, List<Component>> localTextReferencesDictionary = new Dictionary<Text, List<Component>>();
-            Dictionary<Text, List<Component>> foreignTextReferencesDictionary = new Dictionary<Text, List<Component>>();
-
-            // * Step one
-            if (!prefab.TryGetComponentsInChildren<Text>(out List<Text> localTextComponents, skipNestedPrefabs: true))
+            if (!prefab.TryGetComponentsInChildren(out List<Text> localTextComponents, skipNestedPrefabs: true))
             {
-                //msb.AddLine($"{prefab.name} has no text components");
-                //msb.AddSeparator();
                 return;
             }
 
-            // todo I am skipping case when a prefab references a nested prefab of its nested prefab fukk that
-
+            currentDepth++;
             List<TextRefernce> textRefernces = new List<TextRefernce>(localTextComponents.Count);
 
             foreach (Text text in localTextComponents)
             {
                 TextRefernce textRef = new TextRefernce(text);
                 textRefernces.Add(textRef);
+                _replaceCounter.updatedTextComponentCount++;
 
                 //! 1. Internal text component references
                 //* Considering simplest case when text component is only referenced within a single prefabvb
                 if (prefab.TryExtractTextReferences(text, _customMonobehavioursByPrefab[prefab], out List<Component> textReferences))
                 {
-                    localTextReferencesDictionary[text] = textReferences;
                     textRef.SetLocalTextReferences(textReferences);
                     _replaceCounter.updatedTextComponentReferencesCount += textReferences.Count;
                 }
@@ -635,27 +624,21 @@ namespace FabulousReplacer
 
                         if (foundMonobehaviourReferences)
                         {
-                            if (!foreignTextReferencesDictionary.ContainsKey(textInstance))
-                            {
-                                foreignTextReferencesDictionary.Add(textInstance, textInstanceReferences);
-                            }
-                            else
-                            {
-                                foreignTextReferencesDictionary[textInstance].AddRange(textInstanceReferences);
-                            }
-
                             textRef.AddForeignTextReference(textInstance, textInstanceReferences);
                             _replaceCounter.updatedTextComponentReferencesCount += textInstanceReferences.Count;
                         }
                         else
                         {
                             // TODO  Just add a reference to a found text instance that we didn't find other scipts referencing it
-                            textRef.AddTextInstance(textInstance);
+                            textRef.AddUnreferencedTextInstance(textInstance);
                         }
+
+                        _replaceCounter.updatedTextComponentCount++;
                     }
                 }
             }
 
+            PrintPrefabAnalysis(prefab, textRefernces, msb, localTextComponents);
             ////todo Test overwwrite some field
             //var tempmonolist = new List<MonoBehaviour>();
             //if (prefab.TryGetScripts(tempmonolist))
@@ -671,11 +654,15 @@ namespace FabulousReplacer
             //    }
             //}
 
+        }
+
+        private void PrintPrefabAnalysis(GameObject prefab, List<TextRefernce> textRefs, MultilineStringBuilder msb, List<Text> localTextComponents)
+        {
             msb.AddLine($"Analysis of {prefab.name}");
-            if (nestedPrefabs.Count > 0)
+            if (_nestedPrefabs.ContainsKey(prefab) && _nestedPrefabs[prefab].Count > 0)
             {
                 msb.AddLine($"Has nested prefabs:");
-                foreach (var n in nestedPrefabs)
+                foreach (var n in _nestedPrefabs[prefab])
                 {
                     msb.AddLine($"---> {n}");
                 }
@@ -696,19 +683,6 @@ namespace FabulousReplacer
                     msb.AddLine($"---> {monoType.Name}");
                 }
             }
-            if (localTextReferencesDictionary.Count > 0)
-            {
-                msb.AddLine($"Has internal text references:");
-                foreach (var kvp in localTextReferencesDictionary)
-                {
-                    msb.AddLine($"---> {kvp.Key}");
-                    msb.AddLine("---> Is referenced at:");
-                    foreach (var fukkkk in kvp.Value)
-                    {
-                        msb.AddLine($"------> {fukkkk}");
-                    }
-                }
-            }
             if (_crossPrefabReferences.ContainsKey(prefab))
             {
                 msb.AddLine($"Is referenced by other prefabs:");
@@ -717,22 +691,34 @@ namespace FabulousReplacer
                     msb.AddLine($"---> by: {referencer}");
                 }
             }
-            if (foreignTextReferencesDictionary.Count > 0)
+
+            foreach (var textRef in textRefs)
             {
-                msb.AddLine($"(!!!) Has foreign text references:");
-                foreach (var kvp in foreignTextReferencesDictionary)
+                msb.AddLine($"Text at: {textRef.originalPrefabText.gameObject.name}:");
+
+                if (textRef.localTextReferences != null && textRef.localTextReferences.Count > 0)
                 {
-                    msb.AddLine($"---> Foreign reference to an instance of: {kvp.Key} ");
-                    foreach (var fukkkk in kvp.Value)
+                    msb.AddLine($"---> Has internal references:");
+                    foreach (var fukkkk in textRef.localTextReferences)
                     {
-                        msb.AddLine($"------> {fukkkk} component.");
+                        msb.AddLine($"------> {fukkkk}");
+                    }
+                }
+
+                if (textRef.foreignTextReferencesDictionary != null && textRef.foreignTextReferencesDictionary.Count > 0)
+                {
+                    msb.AddLine($"(!!!) Has foreign text references:");
+                    foreach (var kvp in textRef.foreignTextReferencesDictionary)
+                    {
+                        msb.AddLine($"---> Foreign reference to an instance of: {kvp.Key} ");
+                        foreach (var fukkkk in kvp.Value)
+                        {
+                            msb.AddLine($"------> {fukkkk} component.");
+                        }
                     }
                 }
             }
-            else
-            {
-                msb.AddLine($":((((( Has no foreign text references.");
-            }
+
             msb.AddSeparator();
         }
 
