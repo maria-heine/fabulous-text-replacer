@@ -607,6 +607,7 @@ namespace FabulousReplacer
 
         private void AnalyzePrefab(GameObject prefab, List<GameObject> foundPrefabs, MultilineStringBuilder msb, ref int currentDepth)
         {
+            bool logthisone = true;
             if (!prefab.TryGetComponentsInChildren(out List<Text> localTextComponents, skipNestedPrefabs: true))
             {
                 return;
@@ -632,10 +633,19 @@ namespace FabulousReplacer
                         monoRef.TryGetAllFieldsOfType<Text>(out List<FieldInfo> foundTFields);
                         foreach (var field in foundTFields)
                         {
-                            _textFieldsByMonobehaviour[monoRef].Remove(field);
-                            if (_textFieldsByMonobehaviour[monoRef].Count == 0)
+                            try
                             {
-                                _textFieldsByMonobehaviour.Remove(monoRef);
+                                _textFieldsByMonobehaviour[monoRef].Remove(field);
+                                if (_textFieldsByMonobehaviour[monoRef].Count == 0)
+                                {
+                                    _textFieldsByMonobehaviour.Remove(monoRef);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                logthisone = true;
+                                // TODO NOT SURE WHY THAT HAPPENS
+                                //Debug.LogError($"field {field} already? removed from {monoRef}");
                             }
                         }
                     }
@@ -680,10 +690,18 @@ namespace FabulousReplacer
                             monoRef.TryGetAllFieldsOfType<Text>(out List<FieldInfo> foundTFields);
                             foreach (var field in foundTFields)
                             {
-                                _textFieldsByMonobehaviour[monoRef].Remove(field);
-                                if (_textFieldsByMonobehaviour[monoRef].Count == 0)
+                                try
                                 {
-                                    _textFieldsByMonobehaviour.Remove(monoRef);
+                                    _textFieldsByMonobehaviour[monoRef].Remove(field);
+                                    if (_textFieldsByMonobehaviour[monoRef].Count == 0)
+                                    {
+                                        _textFieldsByMonobehaviour.Remove(monoRef);
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    logthisone = true;
+                                    Debug.LogError($"field {field} already? removed from {monoRef.GetType()} at {monoRef.gameObject.transform.root.name}");
                                 }
                             }
                         }
@@ -693,7 +711,7 @@ namespace FabulousReplacer
                 }
             }
 
-            PrintPrefabAnalysis(prefab, textRefernces, msb, localTextComponents);
+            if (logthisone) PrintPrefabAnalysis(prefab, textRefernces, msb, localTextComponents);
             ////todo Test overwwrite some field
             //var tempmonolist = new List<MonoBehaviour>();
             //if (prefab.TryGetScripts(tempmonolist))
