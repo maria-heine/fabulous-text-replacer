@@ -14,12 +14,11 @@ namespace FabulousReplacer
 
         #region PUBLIC
 
-        public static int GetComponentReferenceCount<T>(this MonoBehaviour mono)
+        public static bool TryGetAllFieldsOfType<T>(this MonoBehaviour mono, out List<FieldInfo> foundTFields)
             where T : Component
         {
-            int referenceCount = 0;
-
             FieldInfo[] fields = mono.GetType().GetFields(fieldSearchFlags);
+            foundTFields = new List<FieldInfo>(fields.Length);
 
             foreach (FieldInfo field in fields)
             {
@@ -34,7 +33,7 @@ namespace FabulousReplacer
                         if (obj.GetType() == typeof(T))
                         {
                             Debug.Log($"Found an array for {mono}, field {field.Name}");
-                            referenceCount++;
+                            foundTFields.Add(field);
                         }
                     }
                 }
@@ -50,7 +49,8 @@ namespace FabulousReplacer
                     {
                         if (obj.GetType() == typeof(T))
                         {
-                            referenceCount++;
+                            Debug.Log($"Found a list for {mono}, field {field.Name}");
+                            foundTFields.Add(field);
                         }
                     }
                 }
@@ -59,17 +59,17 @@ namespace FabulousReplacer
                     if (field.FieldType == typeof(T))
                     {
                         if (field. GetValue(mono) != null)
-                            referenceCount++;
+                            foundTFields.Add(field);
                     }
                 }
             }
 
-            return referenceCount;
+            return foundTFields.Count > 0;
         }
 
-        public static bool TryExtractTextReferences(this GameObject prefab, Text text, IEnumerable<MonoBehaviour> monoBehaviourToCheck, out List<Component> textReferences)
+        public static bool TryExtractTextReferences(this GameObject prefab, Text text, IEnumerable<MonoBehaviour> monoBehaviourToCheck, out List<MonoBehaviour> textReferences)
         {
-            textReferences = new List<Component>();
+            textReferences = new List<MonoBehaviour>();
 
             foreach (MonoBehaviour mono in monoBehaviourToCheck)
             {

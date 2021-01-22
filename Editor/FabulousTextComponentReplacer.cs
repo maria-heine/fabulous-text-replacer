@@ -26,12 +26,12 @@ namespace FabulousReplacer
         const string PREFABS_ORIGINAL_LOCATION = "Assets/Original/Prefabs";
         const string PREFABS_COPY_LOCATION = "Assets/Copy/Prefabs";
 
-        TextField textField;
         Box boxDisplayer;
 
         List<GameObject> _loadedPrefabs;
         Dictionary<GameObject, List<GameObject>> _crossPrefabReferences;
         Dictionary<GameObject, List<MonoBehaviour>> _customMonobehavioursByPrefab;
+        Dictionary<MonoBehaviour, List<FieldInfo>> _textFieldsByMonobehaviour;
         Dictionary<GameObject, List<GameObject>> _nestedPrefabs;
         Dictionary<Type, List<GameObject>> _scriptReferences;
         Dictionary<GameObject, List<Type>> _scriptsByPrefab;
@@ -159,10 +159,12 @@ namespace FabulousReplacer
                 List<string> analysisResultsParts = new List<string>();
 
                 int currentDepth = 0;
+                    Debug.Log(_textFieldsByMonobehaviour.Keys.Count);
                 var msb = new MultilineStringBuilder("1 - Prefab analysis");
 
                 foreach (var prefab in _loadedPrefabs)
                 {
+
                     if (msb.Length > 5000)
                     {
                         analysisResultsParts.Add(msb.ToString());
@@ -171,6 +173,7 @@ namespace FabulousReplacer
                     AnalyzePrefab(prefab, _loadedPrefabs, msb, ref currentDepth);
                     currentDepth++;
                 }
+                    Debug.Log(_textFieldsByMonobehaviour.Keys.Count);
 
                 UpgradeProgressBar.Invoke();
 
@@ -405,6 +408,7 @@ namespace FabulousReplacer
             _scriptReferences = new Dictionary<Type, List<GameObject>>();
             _scriptsByPrefab = new Dictionary<GameObject, List<Type>>();
             _customMonobehavioursByPrefab = new Dictionary<GameObject, List<MonoBehaviour>>();
+            _textFieldsByMonobehaviour = new Dictionary<MonoBehaviour, List<FieldInfo>>();
 
             foreach (var prefab in _loadedPrefabs)
             {
@@ -414,6 +418,7 @@ namespace FabulousReplacer
                 prefab.FindScriptsInHierarchy(out List<MonoBehaviour> foundScripts);
                 _customMonobehavioursByPrefab[prefab] = foundScripts;
 
+                // TODO I think this is not used anymore
                 _scriptsByPrefab[prefab] = foundScripts
                     .Select((instance) => instance.GetType())
                     .Distinct()
@@ -430,7 +435,11 @@ namespace FabulousReplacer
                             _scriptReferences[monoType] = new List<GameObject>();
                         }
 
-                        _replaceCounter.totalTextComponentReferencesCount += mono.GetComponentReferenceCount<Text>();
+                        if (mono.TryGetAllFieldsOfType<Text>(out List<FieldInfo> foundFields))
+                        {
+                            _textFieldsByMonobehaviour.Add(mono, foundFields);
+                            _replaceCounter.totalTextComponentReferencesCount += foundFields.Count;
+                        }
 
                         // TODO Remeber to later find all instances of such script in a mono since there may be multiple
                         if (_scriptReferences[monoType].Contains(prefab)) continue;
@@ -439,6 +448,8 @@ namespace FabulousReplacer
                     }
                 }
             }
+
+            Debug.Log(_textFieldsByMonobehaviour.Values.Aggregate(0, (one, two) => one + two.Count));
         }
 
 
@@ -484,6 +495,24 @@ namespace FabulousReplacer
             })
             { text = "Log Script References" };
             box.Add(logScriptReferencesButton);
+
+            var logUnhandledReferences = new Button(() =>
+            {
+                var msb = new MultilineStringBuilder("Unhandled script references");
+                
+                foreach (var kvp in _textFieldsByMonobehaviour)
+                {
+                    msb.AddLine(new string [] { kvp.Key.GetType().ToString(), " from ", _customMonobehavioursByPrefab.First(slot => slot.Value.Contains(kvp.Key)).Key.ToString()});
+                    foreach (var unhandledField in kvp.Value)
+                    {
+                        msb.AddLine($"---> {unhandledField.Name}");
+                    }
+                }
+
+                DisplayInBox(GetTextElement(msb.ToString()));
+            })
+            { text = "Unhandled script references" };
+            box.Add(logUnhandledReferences);
         }
 
         private void LogCrossReferences(MultilineStringBuilder msb, int logDepth = 30)
@@ -594,9 +623,22 @@ namespace FabulousReplacer
 
                 //! 1. Internal text component references
                 //* Considering simplest case when text component is only referenced within a single prefabvb
-                if (prefab.TryExtractTextReferences(text, _customMonobehavioursByPrefab[prefab], out List<Component> textReferences))
+                if (prefab.TryExtractTextReferences(text, _customMonobehavioursByPrefab[prefab], out List<MonoBehaviour> textReferences))
                 {
                     textRef.SetLocalTextReferences(textReferences);
+
+                    foreach (var monoRef in textReferences)
+                    {
+                        monoRef.TryGetAllFieldsOfType<Text>(out List<FieldInfo> foundTFields);
+                        foreach (var field in foundTFields)
+                        {
+                            _textFieldsByMonobehaviour[monoRef].Remove(field);
+                            if (_textFieldsByMonobehaviour[monoRef].Count == 0)
+                            {
+                                _textFieldsByMonobehaviour.Remove(monoRef);
+                            }
+                        }
+                    }
                     _replaceCounter.updatedTextComponentReferencesCount += textReferences.Count;
                 }
 
@@ -620,7 +662,7 @@ namespace FabulousReplacer
                             .TryExtractTextReferences(
                                 text: textInstance,
                                 monoBehaviourToCheck: _customMonobehavioursByPrefab[parentPrefab],
-                                textReferences: out List<Component> textInstanceReferences);
+                                textReferences: out List<MonoBehaviour> textInstanceReferences);
 
                         if (foundMonobehaviourReferences)
                         {
@@ -631,6 +673,19 @@ namespace FabulousReplacer
                         {
                             // TODO  Just add a reference to a found text instance that we didn't find other scipts referencing it
                             textRef.AddUnreferencedTextInstance(textInstance);
+                        }
+
+                        foreach (var monoRef in textInstanceReferences)
+                        {
+                            monoRef.TryGetAllFieldsOfType<Text>(out List<FieldInfo> foundTFields);
+                            foreach (var field in foundTFields)
+                            {
+                                _textFieldsByMonobehaviour[monoRef].Remove(field);
+                                if (_textFieldsByMonobehaviour[monoRef].Count == 0)
+                                {
+                                    _textFieldsByMonobehaviour.Remove(monoRef);
+                                }
+                            }
                         }
 
                         _replaceCounter.updatedTextComponentCount++;

@@ -10,8 +10,8 @@ namespace FabulousReplacer
         {
             public Text originalPrefabText { get; private set; }
             public List<Text> textInstancesWithoutFoundReferences { get; private set; }
-            public List<Component> localTextReferences { get; private set; }
-            public Dictionary<Text, List<Component>> foreignTextReferencesDictionary { get; private set; }
+            public List<MonoBehaviour> localTextReferences { get; private set; }
+            public Dictionary<Text, List<MonoBehaviour>> foreignTextReferencesDictionary { get; private set; }
             //public IEnumerable<Component> LocalTextReferences => localTextReferences;
 
             public TextRefernce(Text originalPrefabText)
@@ -29,26 +29,26 @@ namespace FabulousReplacer
                 textInstancesWithoutFoundReferences.Add(textInstance);
             }
 
-            public void SetLocalTextReferences(List<Component> localReferences)
+            public void SetLocalTextReferences(List<MonoBehaviour> localReferences)
             {
                 localTextReferences = localReferences;
             }
 
-            public void AddLocalTextReference(List<Component> localReferences)
+            public void AddLocalTextReference(List<MonoBehaviour> localReferences)
             {
                 if (localTextReferences == null)
                 {
-                    localTextReferences = new List<Component>();
+                    localTextReferences = new List<MonoBehaviour>();
                 }
 
                 localTextReferences.AddRange(localReferences);
             }
 
-            public void AddForeignTextReference(Text textInstance, List<Component> references)
+            public void AddForeignTextReference(Text textInstance, List<MonoBehaviour> references)
             {
                 if (foreignTextReferencesDictionary == null)
                 {
-                    foreignTextReferencesDictionary = new Dictionary<Text, List<Component>>();
+                    foreignTextReferencesDictionary = new Dictionary<Text, List<MonoBehaviour>>();
                 }
 
                 if (!foreignTextReferencesDictionary.ContainsKey(textInstance))
