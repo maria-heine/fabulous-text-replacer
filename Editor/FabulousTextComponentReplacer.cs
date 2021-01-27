@@ -37,6 +37,7 @@ namespace FabulousReplacer
         Dictionary<GameObject, List<Type>> _scriptsByPrefab;
         Dictionary<string, string> _scriptCopies;
         ReplaceCounter _replaceCounter;
+        ComponentReplacer _componentReplacer;
         bool isBackupMade;
 
         Action UpgradeProgressBar;
@@ -142,7 +143,7 @@ namespace FabulousReplacer
 
             string testAsset = "Assets/RemoteAssets/UI/ActionPopups/FriendActionPopupView.prefab";
 
-            var label = new Label() { text = "Test Replacer" };
+            var label = new Label() { text = "Replacer" };
             container.Add(label);
 
             var domagicbutton = new Button(() =>
@@ -156,39 +157,46 @@ namespace FabulousReplacer
 
             var analyseprefabbuttin = new Button(() =>
             {
+                List<TextRefernce> textReferences = new List<TextRefernce>();
+
                 List<string> analysisResultsParts = new List<string>();
 
                 int currentDepth = 0;
-                    Debug.Log(_textFieldsByMonobehaviour.Keys.Count);
                 var msb = new MultilineStringBuilder("1 - Prefab analysis");
 
                 foreach (var prefab in _loadedPrefabs)
                 {
-
                     if (msb.Length > 5000)
                     {
                         analysisResultsParts.Add(msb.ToString());
                         msb = new MultilineStringBuilder($"{analysisResultsParts.Count + 1} - Prefab analysis");
                     }
-                    AnalyzePrefab(prefab, _loadedPrefabs, msb, ref currentDepth);
-                    currentDepth++;
+
+                    List<TextRefernce> resultReferences = AnalyzePrefab(prefab, msb, ref currentDepth);
+
+                    if (resultReferences != null)
+                    {
+                        textReferences.AddRange(resultReferences);
+                    }
                 }
-                    Debug.Log(_textFieldsByMonobehaviour.Keys.Count);
+
+                analysisResultsParts.Add(msb.ToString());
 
                 UpgradeProgressBar.Invoke();
 
-                try
+                DisplayInBox(GetTextBlock(analysisResultsParts));
+
+                // Draw and initialize / reinitialize component replacer
+                if (_componentReplacer == null)
                 {
-                    VisualElement el = new VisualElement();
-                    foreach (var analysisSegment in analysisResultsParts)
-                    {
-                        el.Add(GetTextElement(analysisSegment));
-                    }
-                    DisplayInBox(el);
+                    _componentReplacer = new ComponentReplacer();
+                    _componentReplacer.SetReplacerTextReferences(textReferences);
+                    Button replaceComponentsButton = _componentReplacer.GetReplacerButton(editorWindow: this);
+                    container.Add(replaceComponentsButton);
                 }
-                catch (Exception ex)
+                else
                 {
-                    Debug.Log(ex.Message);
+                    _componentReplacer.SetReplacerTextReferences(textReferences);
                 }
             })
             { text = "Analyse prefabs" };
@@ -474,6 +482,14 @@ namespace FabulousReplacer
             loggingDepthField.value = 30;
             box.Add(loggingDepthField);
 
+            var isCompiling = new Button(() =>
+            {
+                bool isCompiling = EditorApplication.isCompiling;
+                DisplayInBox(GetTextElement(isCompiling.ToString()));
+            })
+            { text = "Is editor compiling" };
+            box.Add(isCompiling);
+
             var logCrossReferences = new Button(() =>
             {
                 var msb = new MultilineStringBuilder("Log Cross References");
@@ -499,10 +515,10 @@ namespace FabulousReplacer
             var logUnhandledReferences = new Button(() =>
             {
                 var msb = new MultilineStringBuilder("Unhandled script references");
-                
+
                 foreach (var kvp in _textFieldsByMonobehaviour)
                 {
-                    msb.AddLine(new string [] { kvp.Key.GetType().ToString(), " from ", _customMonobehavioursByPrefab.First(slot => slot.Value.Contains(kvp.Key)).Key.ToString()});
+                    msb.AddLine(new string[] { kvp.Key.GetType().ToString(), " from ", _customMonobehavioursByPrefab.First(slot => slot.Value.Contains(kvp.Key)).Key.ToString() });
                     foreach (var unhandledField in kvp.Value)
                     {
                         msb.AddLine($"---> {unhandledField.Name}");
@@ -562,7 +578,7 @@ namespace FabulousReplacer
         /// </summary>
         /// <param name="originalPrefab"></param>
         /// <param name="originalText"></param>
-        /// <returns>Returns a dictionery of prefabs referencing an instance of the originalPrefab with a list of it's specific Text components being referenced</returns>
+        /// <returns>Returns a dictionary of prefabs referencing an instance of the originalPrefab with a list of it's specific Text components being referenced</returns>
         private Dictionary<GameObject, List<Text>> GetAllTextInstances(GameObject originalPrefab, Text originalText)
         {
             Dictionary<GameObject, List<Text>> prefabTextInstances = new Dictionary<GameObject, List<Text>>();
@@ -605,15 +621,17 @@ namespace FabulousReplacer
             return prefabTextInstances;
         }
 
-        private void AnalyzePrefab(GameObject prefab, List<GameObject> foundPrefabs, MultilineStringBuilder msb, ref int currentDepth)
+        private List<TextRefernce> AnalyzePrefab(GameObject prefab, MultilineStringBuilder msb, ref int currentDepth)
         {
-            bool logthisone = true;
+            // Skips execition if there were no text components found in the hierarchy
             if (!prefab.TryGetComponentsInChildren(out List<Text> localTextComponents, skipNestedPrefabs: true))
             {
-                return;
+                return null;
             }
 
+            bool logthisone = true;
             currentDepth++;
+
             List<TextRefernce> textRefernces = new List<TextRefernce>(localTextComponents.Count);
 
             foreach (Text text in localTextComponents)
@@ -627,39 +645,18 @@ namespace FabulousReplacer
                 if (prefab.TryExtractTextReferences(text, _customMonobehavioursByPrefab[prefab], out List<MonoBehaviour> textReferences))
                 {
                     textRef.SetLocalTextReferences(textReferences);
+                    logthisone = UpdateCountLogger(logthisone, textReferences);
 
-                    foreach (var monoRef in textReferences)
-                    {
-                        monoRef.TryGetAllFieldsOfType<Text>(out List<FieldInfo> foundTFields);
-                        foreach (var field in foundTFields)
-                        {
-                            try
-                            {
-                                _textFieldsByMonobehaviour[monoRef].Remove(field);
-                                if (_textFieldsByMonobehaviour[monoRef].Count == 0)
-                                {
-                                    _textFieldsByMonobehaviour.Remove(monoRef);
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                logthisone = true;
-                                // TODO NOT SURE WHY THAT HAPPENS
-                                //Debug.LogError($"field {field} already? removed from {monoRef}");
-                            }
-                        }
-                    }
                     _replaceCounter.updatedTextComponentReferencesCount += textReferences.Count;
                 }
 
-                //! 2. Text components referenced by nested prefabs
-                //! 3. Text components of prefabs that are reference by the other nested prefabs
-                //! X???. Text components of prefabs that are referenced by parent of a parent OR by a nested prefab of a parent of a parent OOF
+                //todo 2. Text components referenced by nested prefabs
+                //todo 3. Text components of prefabs that are reference by the other nested prefabs
+                //todo X???. Text components of prefabs that are referenced by parent of a parent OR by a nested prefab of a parent of a parent OOF
+
                 //! 4. Foreign text component references
-                //! References to text components in 
                 // Get all instances of a Text component along with the parentPrefab that is holding them
                 // It is a list of Text components because parentPrefab may hold multiple references to that Text Component
-                // TODO 1. making sure that GetAllTextInstances really gets ALL of them
                 foreach (var kvp in GetAllTextInstances(prefab, text))
                 {
                     GameObject parentPrefab = kvp.Key;
@@ -667,7 +664,6 @@ namespace FabulousReplacer
 
                     foreach (Text textInstance in textComponentInstances)
                     {
-                        // TODO 2. making sure that
                         bool foundMonobehaviourReferences = parentPrefab
                             .TryExtractTextReferences(
                                 text: textInstance,
@@ -685,26 +681,7 @@ namespace FabulousReplacer
                             textRef.AddUnreferencedTextInstance(textInstance);
                         }
 
-                        foreach (var monoRef in textInstanceReferences)
-                        {
-                            monoRef.TryGetAllFieldsOfType<Text>(out List<FieldInfo> foundTFields);
-                            foreach (var field in foundTFields)
-                            {
-                                try
-                                {
-                                    _textFieldsByMonobehaviour[monoRef].Remove(field);
-                                    if (_textFieldsByMonobehaviour[monoRef].Count == 0)
-                                    {
-                                        _textFieldsByMonobehaviour.Remove(monoRef);
-                                    }
-                                }
-                                catch (Exception ex)
-                                {
-                                    logthisone = true;
-                                    Debug.LogError($"field {field} already? removed from {monoRef.GetType()} at {monoRef.gameObject.transform.root.name}");
-                                }
-                            }
-                        }
+                        logthisone = UpdateCountLogger(logthisone, textInstanceReferences);
 
                         _replaceCounter.updatedTextComponentCount++;
                     }
@@ -712,6 +689,8 @@ namespace FabulousReplacer
             }
 
             if (logthisone) PrintPrefabAnalysis(prefab, textRefernces, msb, localTextComponents);
+
+            return textRefernces;
             ////todo Test overwwrite some field
             //var tempmonolist = new List<MonoBehaviour>();
             //if (prefab.TryGetScripts(tempmonolist))
@@ -727,6 +706,34 @@ namespace FabulousReplacer
             //    }
             //}
 
+        }
+
+        private bool UpdateCountLogger(bool logthisone, List<MonoBehaviour> textReferences)
+        {
+            // * Below is just for counter purposes
+            foreach (var monoRef in textReferences)
+            {
+                monoRef.TryGetAllFieldsOfType<Text>(out List<FieldInfo> foundTFields);
+                foreach (var field in foundTFields)
+                {
+                    try
+                    {
+                        _textFieldsByMonobehaviour[monoRef].Remove(field);
+                        if (_textFieldsByMonobehaviour[monoRef].Count == 0)
+                        {
+                            _textFieldsByMonobehaviour.Remove(monoRef);
+                        }
+                    }
+                    catch (Exception)
+                    {
+                        logthisone = true;
+                        // TODO NOT SURE WHY THAT HAPPENS
+                        //Debug.LogError($"field {field} already? removed from {monoRef}");
+                    }
+                }
+            }
+
+            return logthisone;
         }
 
         private void PrintPrefabAnalysis(GameObject prefab, List<TextRefernce> textRefs, MultilineStringBuilder msb, List<Text> localTextComponents)

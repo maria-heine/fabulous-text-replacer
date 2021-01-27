@@ -15,6 +15,20 @@ namespace FabulousReplacer
             return new TextElement() { text = textToDisplay };
         }
 
+        public static VisualElement GetTextBlock(List<string> textParts)
+        {
+            VisualElement el = new VisualElement();
+            Debug.Log(textParts.Count);
+            
+
+            foreach (var textPiece in textParts)
+            {
+                el.Add(GetTextElement(textPiece));
+            }
+
+            return el;
+        }
+
         #region NESTED PREFAB SEARCHING
 
         public static List<GameObject> CheckHierarchyForNestedPrefabs(this GameObject root)
@@ -63,9 +77,9 @@ namespace FabulousReplacer
 
                     if (!isRoot)
                     {
-                        if (child.gameObject.TryGetComponentsInChildren<T>( out List<T> childrenComponents ))
+                        if (child.gameObject.TryGetComponentsInChildren<T>(out List<T> childrenComponents))
                         {
-                            foundComponents.AddRange (childrenComponents);
+                            foundComponents.AddRange(childrenComponents);
                         }
                     }
                 }
@@ -103,37 +117,37 @@ namespace FabulousReplacer
         public static T GetSameComponentForDuplicate<T>(GameObject original, T originalC, GameObject duplicate)
             where T : Component
         {
-                // remember hierarchy
-                Stack<int> path = new Stack<int>();
+            // remember hierarchy
+            Stack<int> path = new Stack<int>();
 
-                GameObject g = originalC.gameObject;
-                while (!object.ReferenceEquals(original, g))
+            GameObject g = originalC.gameObject;
+            while (!object.ReferenceEquals(original, g))
+            {
+                path.Push(g.transform.GetSiblingIndex());
+                g = g.transform.parent.gameObject;
+            }
+
+            // repeat hierarchy on duplicated object
+            GameObject sameGo = duplicate;
+            while (path.Count > 0)
+            {
+                sameGo = sameGo.transform.GetChild(path.Pop()).gameObject;
+            }
+
+            //get component index
+            var cc = originalC.gameObject.GetComponents<T>();
+            int componentIndex = -1;
+            for (int i = 0; i < cc.Length; i++)
+            {
+                if (object.ReferenceEquals(originalC, cc[i]))
                 {
-                    path.Push(g.transform.GetSiblingIndex());
-                    g = g.transform.parent.gameObject;
+                    componentIndex = i;
+                    break;
                 }
+            }
 
-                // repeat hierarchy on duplicated object
-                GameObject sameGo = duplicate;
-                while (path.Count > 0)
-                {
-                    sameGo = sameGo.transform.GetChild(path.Pop()).gameObject;
-                }
+            return sameGo.GetComponents<T>()[componentIndex];
 
-                //get component index
-                var cc = originalC.gameObject.GetComponents<T>();
-                int componentIndex = -1;
-                for (int i = 0; i < cc.Length; i++)
-                {
-                    if (object.ReferenceEquals(originalC, cc[i]))
-                    {
-                        componentIndex = i;
-                        break;
-                    }
-                }
-
-                return sameGo.GetComponents<T>()[componentIndex];
-            
         }
 
         //* Oki honestly I am not sure when would I use that
@@ -208,7 +222,9 @@ namespace FabulousReplacer
                 {
                     string monoNamespce = mono.GetType().Namespace;
 
-                    if ((monoNamespce != null && monoNamespce.Contains("UnityEngine")) == false)
+                    if ((monoNamespce != null 
+                        && monoNamespce.Contains("UnityEngine")) == false
+                        && monoNamespce.Contains("TMPro") == false)
                     {
                         foundScripts.Add(mono);
                         foundSometing = true;

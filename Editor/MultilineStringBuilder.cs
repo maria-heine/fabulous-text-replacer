@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Text;
 
 namespace FabulousReplacer
@@ -27,11 +28,6 @@ namespace FabulousReplacer
 
         public void AddLine(string line)
         {
-            if (builder.Length > 40000)
-            {
-                return;
-            }
-
             builder.Append($"{line} \n");
         }
 

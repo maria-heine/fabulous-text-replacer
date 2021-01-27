@@ -8,10 +8,22 @@ public class TextToTextMeshProAdapter : Text
 {
     private TextMeshProUGUI _textMesh;
 
-    public void SetTextMeshProAdapterReference(TextMeshProUGUI textMesh)
+    public TextToTextMeshProAdapter() { }
+
+    public TextToTextMeshProAdapter(TextMeshProUGUI textMesh)
     {
+        if (textMesh == null)
+        {
+            Debug.LogError($"Text mesh reference is null for {textMesh.gameObject.name} at {textMesh.transform.root.name}");
+        }
+
         _textMesh = textMesh;
     }
+
+    // public void SetTextMeshProAdapterReference(TextMeshProUGUI textMesh)
+    // {
+    //     _textMesh = textMesh;
+    // }
 
     public override string text 
     { 
