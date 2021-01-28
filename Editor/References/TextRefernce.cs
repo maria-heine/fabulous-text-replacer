@@ -1,22 +1,32 @@
-using System;
+using TMPro;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEditor;
 
 namespace FabulousReplacer
 {
+
     public class TextRefernce
     {
+        public string prefabPath { get; private set;}
+
+        //* Text components
         public Text originalPrefabText { get; private set; }
+        public TextMeshProUGUI updatedTMProText { get; set; }
+
+        //* References
         public List<Text> textInstancesWithoutFoundReferences { get; private set; } // ? WTF IS THAT
         public List<MonoBehaviour> localTextReferences { get; private set; }
         public Dictionary<Text, List<MonoBehaviour>> foreignTextReferencesDictionary { get; private set; }
         // Below includes both originalPrefabText and all it's instances found across the project's nested prefabs
-        public Dictionary<Text, List<MonoBehaviour>> textReferencesDictionary { get; private set; }
-        public Dictionary<Type, bool> isUpdatedUniqeMonobehaviourType { get; private set; }
+        // public Dictionary<Text, List<MonoBehaviour>> textReferencesDictionary { get; private set; }
+        // public Dictionary<Type, bool> isUpdatedUniqeMonobehaviourType { get; private set; }
 
-        public TextRefernce(Text originalPrefabText)
+        public TextRefernce(string prefabPath, Text originalPrefabText)
         {
+            // PrefabUtility.
+            this.prefabPath = prefabPath;
             this.originalPrefabText = originalPrefabText;
         }
 
@@ -38,16 +48,16 @@ namespace FabulousReplacer
         public void AddLocalTextReference(List<MonoBehaviour> localReferences)
         {
             if (localTextReferences == null) localTextReferences = new List<MonoBehaviour>();
-            if (isUpdatedUniqeMonobehaviourType == null) isUpdatedUniqeMonobehaviourType = new Dictionary<Type, bool>();
+            // if (isUpdatedUniqeMonobehaviourType == null) isUpdatedUniqeMonobehaviourType = new Dictionary<Type, bool>();
 
             localTextReferences.AddRange(localReferences);
-            SaveUniqueMonoBehaviourTypes(localReferences);
+            // SaveUniqueMonoBehaviourTypes(localReferences);
         }
 
         public void AddForeignTextReference(Text textInstance, List<MonoBehaviour> references)
         {
             if (foreignTextReferencesDictionary == null) foreignTextReferencesDictionary = new Dictionary<Text, List<MonoBehaviour>>();
-            if (isUpdatedUniqeMonobehaviourType == null) isUpdatedUniqeMonobehaviourType = new Dictionary<Type, bool>();
+            // if (isUpdatedUniqeMonobehaviourType == null) isUpdatedUniqeMonobehaviourType = new Dictionary<Type, bool>();
 
             if (!foreignTextReferencesDictionary.ContainsKey(textInstance))
             {
@@ -58,15 +68,6 @@ namespace FabulousReplacer
                 foreignTextReferencesDictionary[textInstance].AddRange(references);
             }
 
-            SaveUniqueMonoBehaviourTypes(references);
-        }
-
-        private void SaveUniqueMonoBehaviourTypes(IEnumerable<MonoBehaviour> monos)
-        {
-            foreach (var mono in monos)
-            {
-                isUpdatedUniqeMonobehaviourType[mono.GetType()] = false;
-            }
         }
     }
 }

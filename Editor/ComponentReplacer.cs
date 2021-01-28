@@ -20,119 +20,101 @@ namespace FabulousReplacer
     public class ComponentReplacer
     {
         List<TextRefernce> _textReferences;
+        Button _updateComponentsButton;
+        UpdatedReferenceAddressBook _updatedReferenceAddressBook;
+        Dictionary<Type,List<string>> _updatedMonoFields;
+
+        public ComponentReplacer(UpdatedReferenceAddressBook updatedReferenceAddressBook, Button updateComponentsButton)
+        {
+            _updatedReferenceAddressBook = updatedReferenceAddressBook;
+            _updateComponentsButton = updateComponentsButton;
+            _updatedMonoFields = new Dictionary<Type, List<string>>();
+            SetupButtons();
+        }
 
         public void SetReplacerTextReferences(List<TextRefernce> textReferences)
         {
             _textReferences = textReferences;
         }
 
-        public Button GetReplacerButton(EditorWindow editorWindow)
+        private void SetupButtons()
         {
-            var replacerButton = new Button(() =>
+            _updateComponentsButton.clicked += () =>
             {
                 // EditorCoroutineUtility.StartCoroutine(RunReplaceLogic(), editorWindow);
                 RunReplaceLogic();
-            })
-            { text = "Replace text components" };
-
-            return replacerButton;
+                // _updateReferencesButton.visible = true;
+            };
         }
 
         // private IEnumerator RunReplaceLogic()
-        private async void RunReplaceLogic()
+        private void RunReplaceLogic()
         {
             // 1. original text component shouldn't be updated before all its past references are saved somewhere
             // otherwise it will be impossible to know who else needs reference update
             TextRefernce testReference = _textReferences[0];
 
-            // foreach (var kvp in testReference.textReferencesDictionary)
-            // {
-            //     Text textToReplace = kvp.Key;
 
-            //     foreach (MonoBehaviour mono in kvp.Value)
-            //     {
-
-            //     }
-            // }
-
-            foreach (MonoBehaviour localReference in testReference.localTextReferences)
+            foreach (var kvp in _updatedReferenceAddressBook)
             {
-                // if (testReference.isUpdatedUniqeMonobehaviourType[localReference.GetType()])
-                // {
-                //     return;
-                // }
+                string prefabPath = kvp.Key;
 
-                Debug.Log(EditorApplication.isCompiling);
+                foreach (UpdatedReference reference in kvp.Value)
+                {
+                    // This is easy in case of MonoBehaviours since their filename must match the calssname
+                    // * Step: Update script
+                    // TODO Alternate behaviour when the script was already modified for that field name
+                    // TODO I can't
+                    UpdateScript(reference.monoType, reference.fieldName);
+                    // AssetDatabase.
 
-                Debug.Log(testReference.originalPrefabText);
-
-                Type monoType = localReference.GetType();
-
-                // This is easy in case of MonoBehaviours since their filename must match the calssname
-                // * Step: Update script
-                UpdateScript(testReference, localReference, out string newFieldName);
-                // AssetDatabase.
-
-                // * Step: Replace component
-                ReplaceTextComponent(testReference, out TextMeshProUGUI newTMProComponent);
-
-                // * Step: Update new component references
-                // TODO
-                Debug.Log(EditorApplication.isCompiling);
-
-                // while (EditorApplication.isCompiling)
-                // while (false)
-                // {
-                //     Debug.LogFormat("Time since startup: {0} s", Time.realtimeSinceStartup);
-                //     yield return new EditorWaitForSeconds(0.1f);
-                // }
-                Debug.Log(testReference.originalPrefabText);
-                
-                CompilationPipeline.compilationStarted += ((somethign) => {
-                    Debug.Log("Started");
-                    Debug.Log(somethign);
-                });
-                CompilationPipeline.compilationFinished += ((somethign) => {
-                    Debug.Log("Finished");
-                    Debug.Log(EditorApplication.isCompiling);
-                    Debug.Log(testReference.originalPrefabText.transform.root);
-                    
-                    TestFields(monoType, newFieldName, testReference);
-                });
-                CompilationPipeline.RequestScriptCompilation();
-                // await Task.Delay(7000);k
-
-                // yield return new EditorWaitForSeconds(5f);
-
-                // Debug.Log(EditorApplication.isCompiling);
-                 
-
-                // newTMProField.SetValue(localReference, newTMProComponent);
-
-                // * Step: Check if that script was present in one of instance references
-                // foreach (var instanceRef in testReference.foreignTextReferencesDictionary)
-                // {
-                //     Text oldInstance = instanceRef.Key;
-                //     if (oldInstance == null) Debug.LogError("its already null");
-                //     else Debug.Log(oldInstance.transform.root.name);
-                // }
-
-                // testReference.isUpdatedUniqeMonobehaviourType[localReference.GetType()] = true;
+                    // * Step: Replace component
+                    // TODO What if that (oops! that cant be immediately removed here)
+                    ReplaceTextComponent(reference, out TextMeshProUGUI newTMProComponent);
+                }
             }
 
-            // Debug.Log("foreign references");
-
-            // foreach (var foreignReference in testReference.foreignTextReferencesDictionary)
-            // {
-            //     foreach (var mono in foreignReference.Value)
-            //     {
-            //         Debug.Log(mono.transform.root.name);
-            //     }
-            // }
-
-            // ReplaceTextComponent(testReference);
             AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh();
+
+            CompilationPipeline.compilationFinished += stuff =>
+            {
+                foreach (var kvp in _updatedReferenceAddressBook)
+                {
+                    Debug.Log(kvp.Key);
+
+                    foreach (UpdatedReference reference in kvp.Value)
+                    {
+                        Debug.Log(reference.originalPrefab);
+                        Debug.Log(reference.originalText);
+                    }
+                }
+            };
+
+            CompilationPipeline.RequestScriptCompilation();
+
+
+            // foreach (MonoBehaviour localReference in testReference.localTextReferences)
+            // {
+            //     Type monoType = localReference.GetType();
+            //     string scriptFileName = monoType.Name;
+            //     string asmName = monoType.AssemblyQualifiedName;
+
+            //     // This is easy in case of MonoBehaviours since their filename must match the calssname
+            //     // * Step: Update script
+            //     UpdateScript(testReference, localReference, out string newFieldName);
+            //     // AssetDatabase.
+
+            //     // * Step: Replace component
+            //     ReplaceTextComponent(testReference, out TextMeshProUGUI newTMProComponent);
+            //     testReference.updatedTMProText = newTMProComponent;
+
+            //     AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate | ImportAssetOptions.ForceSynchronousImport);
+
+            //     // * Step: Update new component references
+            //     // TODO
+            //     Debug.Log(EditorApplication.isCompiling);
+
+            // }
         }
 
         private static void TestFields(Type monoType, string newFieldName, TextRefernce refernce)
@@ -144,30 +126,48 @@ namespace FabulousReplacer
             if (newTMProField == null) Debug.Log("this is bad");
             if (testField == null) Debug.Log("huh!");
             if (serializedTextField == null) Debug.Log("shouldnt be null!");
-
-            Debug.Log("wELL");
-            string scriptFileName = monoType.Name;
-            string[] assets = AssetDatabase.FindAssets($"{refernce.originalPrefabText.transform.root}");
-            var path = AssetDatabase.GUIDToAssetPath(assets[0]);
-            Debug.Log(path);
-            UnityEngine.Object topAsset = AssetDatabase.LoadAssetAtPath(path, typeof(Component));
-            Debug.Log(topAsset);
-            
-            // var fields = monoType.GetRuntimeFields();
-            // foreach (var field in fields)
-            // {
-            //     Debug.Log(field.Name);
-                
-            // }
         }
-
-
 
         //
         // ─── SCRIPT REPLACEMENT ──────────────────────────────────────────
         //
 
         #region SCRIPT REPLACEMENT 
+
+        private void UpdateScript(Type monoType, string fieldName)
+        {
+            if (_updatedMonoFields.ContainsKey(monoType) && _updatedMonoFields[monoType].Contains(fieldName))
+            {
+                return;
+            }
+            else
+            {
+                if (!_updatedMonoFields.ContainsKey(monoType))
+                {
+                    _updatedMonoFields[monoType] = new List<string>();
+                }
+                _updatedMonoFields[monoType].Add(fieldName);
+            }
+
+            string scriptFileName = monoType.Name;
+
+            string[] assets = AssetDatabase.FindAssets($"{scriptFileName}");
+            var path = AssetDatabase.GUIDToAssetPath(assets[0]);
+
+            if (assets.Length != 1)
+            {
+                Debug.LogError("Well, really we shouldn't find less or more than exactly one asset like that");
+            }
+            else if (AssetDatabase.GetMainAssetTypeAtPath(path) != typeof(UnityEditor.MonoScript))
+            {
+                Debug.LogError($"What on earth did you find? path: {path}");
+            }
+
+            List<string> lines = GetUpdatedScriptLines(path, fieldName);
+            SaveUpdateScript(path, lines);
+
+            fieldName = $"{fieldName}TMPro";
+        }
 
         private static void UpdateScript(TextRefernce textReference, MonoBehaviour localReference, out string newFieldName)
         {
@@ -196,7 +196,7 @@ namespace FabulousReplacer
 
             // AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate | ImportAssetOptions.ForceSynchronousImport);
             // AssetDatabase.ImportAsset(path);
-            
+
             // TODO temporarily disabled
             // AssetDatabase.Refresh();
         }
@@ -286,6 +286,27 @@ namespace FabulousReplacer
         }
 
         #endregion // SCRIPT REPLACEMENT
+
+        private void ReplaceTextComponent(UpdatedReference updatedReference, out TextMeshProUGUI newTMProComponent)
+        {
+            Stack<int> textLocation = new Stack<int>(updatedReference.referencedTextAddress);
+            string originalText = updatedReference.originalText.text;
+
+            GameObject textParent = FabulousExtensions.GetGameObjectAtAddress(updatedReference.originalPrefab, textLocation);
+
+            Debug.Log($"trying to get text field on prefab {updatedReference.originalPrefab} : {textParent.name}");
+            if (textParent.TryGetComponent<Text>(out Text text))
+            {
+                UnityEngine.Object.DestroyImmediate(updatedReference.originalText, true);
+                TextMeshProUGUI newText = textParent.AddComponent<TextMeshProUGUI>();
+                newText.text = originalText;
+                newTMProComponent = newText;
+            }
+            else
+            {
+                newTMProComponent = textParent.GetComponent<TextMeshProUGUI>();
+            }
+        }
 
         private void ReplaceTextComponent(TextRefernce textRefernce, out TextMeshProUGUI newTMProComponent)
         {

@@ -19,7 +19,7 @@ namespace FabulousReplacer
         {
             VisualElement el = new VisualElement();
             Debug.Log(textParts.Count);
-            
+
 
             foreach (var textPiece in textParts)
             {
@@ -118,6 +118,7 @@ namespace FabulousReplacer
             where T : Component
         {
             // remember hierarchy
+            // TODO replace with below method
             Stack<int> path = new Stack<int>();
 
             GameObject g = originalC.gameObject;
@@ -147,7 +148,31 @@ namespace FabulousReplacer
             }
 
             return sameGo.GetComponents<T>()[componentIndex];
+        }
 
+        public static Stack<int> GetComponentAddressInHierarchy(GameObject root, Component component)
+        {
+            Stack<int> path = new Stack<int>();
+
+            GameObject g = component.gameObject;
+            while (!object.ReferenceEquals(root, g))
+            {
+                path.Push(g.transform.GetSiblingIndex());
+                g = g.transform.parent.gameObject;
+            }
+
+            return path;
+        }
+
+        public static GameObject GetGameObjectAtAddress(GameObject root, Stack<int> address)
+        {
+            // repeat hierarchy on duplicated object
+            GameObject addresee = root;
+            while (address.Count > 0)
+            {
+                addresee = addresee.transform.GetChild(address.Pop()).gameObject;
+            }
+            return addresee;
         }
 
         //* Oki honestly I am not sure when would I use that
@@ -222,7 +247,7 @@ namespace FabulousReplacer
                 {
                     string monoNamespce = mono.GetType().Namespace;
 
-                    if ((monoNamespce != null 
+                    if ((monoNamespce != null
                         && monoNamespce.Contains("UnityEngine")) == false
                         && monoNamespce.Contains("TMPro") == false)
                     {

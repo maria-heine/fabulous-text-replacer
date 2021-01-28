@@ -151,13 +151,14 @@ namespace FabulousReplacer
             return foundTFields.Count > 0;
         }
 
+        //TODO remove this one
         public static bool TryExtractTextReferences(this GameObject prefab, Text text, IEnumerable<MonoBehaviour> monoBehaviourToCheck, out List<MonoBehaviour> textReferences)
         {
             textReferences = new List<MonoBehaviour>();
 
             foreach (MonoBehaviour mono in monoBehaviourToCheck)
             {
-                if (mono.IsReferencingComponent(text))
+                if (mono.IsReferencingComponent(text, out string fieldName))
                 {
                     textReferences.Add(mono);
                 }
@@ -170,14 +171,17 @@ namespace FabulousReplacer
 
         #region PRIVATE
 
-        private static bool IsReferencingComponent(this Component thisComponent, Component anotherComponent)
+        public static bool IsReferencingComponent(this Component thisComponent, Component anotherComponent, out string referencingFieldName)
         {
+            referencingFieldName = null;
+            
             FieldInfo[] fields = thisComponent.GetType().GetFields(FIELD_SEARCH_FLAGS);
 
             foreach (FieldInfo field in fields)
             {
                 if (IsFieldReferencingComponent(thisComponent, field, anotherComponent))
                 {
+                    referencingFieldName = field.Name;
                     return true;
                 }
             }

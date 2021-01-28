@@ -38,9 +38,26 @@ namespace FabulousReplacer
         Dictionary<string, string> _scriptCopies;
         ReplaceCounter _replaceCounter;
         ComponentReplacer _componentReplacer;
+        ReferenceUpdater _referenceUpdater;
+        UpdatedReferenceAddressBook _updatedReferenceAddressBook;
         bool isBackupMade;
 
         Action UpgradeProgressBar;
+
+        UpdatedReferenceAddressBook UpdatedReferenceAddressBook
+        {
+            get
+            {
+                if (_updatedReferenceAddressBook == null)
+                {
+                    string addressBookPath = "Packages/com.mariaheineboombyte.fabulous-text-replacer/Editor/Scriptable/UpdatedReferenceAddressBook.asset";
+                    UnityEngine.Object addressBook = AssetDatabase.LoadAssetAtPath(addressBookPath, typeof(UpdatedReferenceAddressBook));
+                    _updatedReferenceAddressBook = addressBook as UpdatedReferenceAddressBook;
+                }
+
+                return _updatedReferenceAddressBook;
+            }
+        }
 
         private class ReplaceCounter
         {
@@ -89,7 +106,7 @@ namespace FabulousReplacer
             dataBox.Add(boxDisplayer);
 
             DrawInitializeSection(menuBox);
-            DrawTestTextReplacer(menuBox);
+            DrawReplacerButtons(menuBox);
             DrawLoggingButtons(menuBox);
             DrawProgressStatus(menuBox);
         }
@@ -136,26 +153,32 @@ namespace FabulousReplacer
             };
         }
 
-        private void DrawTestTextReplacer(VisualElement root)
+        // * HERE
+        private void DrawReplacerButtons(VisualElement root)
         {
             var container = new Box();
             root.Add(container);
 
-            string testAsset = "Assets/RemoteAssets/UI/ActionPopups/FriendActionPopupView.prefab";
-
             var label = new Label() { text = "Replacer" };
             container.Add(label);
 
-            var domagicbutton = new Button(() =>
-            {
-                RectTransform loadedAsset = (RectTransform)AssetDatabase.LoadAssetAtPath(testAsset, typeof(RectTransform));
-                var text = loadedAsset.GetComponentInChildren<Text>();
-                loadedAsset.gameObject.AddComponent<Dropdown>();
-                AssetDatabase.SaveAssets();
-            })
-            { text = "Do magic button" };
+            var analysePrefabsButton = new Button()
+            { text = "Analyse prefabs" };
+            container.Add(analysePrefabsButton);
 
-            var analyseprefabbuttin = new Button(() =>
+            var updateComponentsButton = new Button() 
+            { text = "Update components" };
+            _componentReplacer = new ComponentReplacer(UpdatedReferenceAddressBook, updateComponentsButton);
+            // updateComponentsButton.visible = false;
+            container.Add(updateComponentsButton);
+
+            var referenceUpdateButton = new Button()
+            { text = "Update references" };
+            _referenceUpdater = new ReferenceUpdater(UpdatedReferenceAddressBook, referenceUpdateButton);
+            // referenceUpdateButton.visible = false;
+            container.Add(referenceUpdateButton);
+
+            analysePrefabsButton.clicked += () =>
             {
                 List<TextRefernce> textReferences = new List<TextRefernce>();
 
@@ -186,28 +209,12 @@ namespace FabulousReplacer
 
                 DisplayInBox(GetTextBlock(analysisResultsParts));
 
-                // Draw and initialize / reinitialize component replacer
                 if (_componentReplacer == null)
                 {
-                    _componentReplacer = new ComponentReplacer();
-                    _componentReplacer.SetReplacerTextReferences(textReferences);
-                    Button replaceComponentsButton = _componentReplacer.GetReplacerButton(editorWindow: this);
-                    container.Add(replaceComponentsButton);
                 }
-                else
-                {
-                    _componentReplacer.SetReplacerTextReferences(textReferences);
-                }
-            })
-            { text = "Analyse prefabs" };
 
-            var clearBackupButton = new Button(() =>
-            {
-                ClearAndRevertBackup();
-            })
-            { text = "Clear backup" };
-            container.Add(clearBackupButton);
-            container.Add(analyseprefabbuttin);
+                _componentReplacer.SetReplacerTextReferences(textReferences);
+            };
         }
 
         #endregion //  EDITOR WINDOW STARTUP
@@ -232,13 +239,14 @@ namespace FabulousReplacer
 
             Button initializeButton = new Button(() =>
             {
-                if (copiesAndBackupToggle.value)
-                {
-                    PrepareCopiesAndBackup();
-                }
+                // if (copiesAndBackupToggle.value)
+                // {
+                //     PrepareCopiesAndBackup();
+                // }
 
                 //* Where to search for prefabs (depending on whether we make a backup or not)
                 // ! Prefab backup abandoned
+                UpdatedReferenceAddressBook.ClearAddressBook();
                 LoadAllPrefabs();
                 FindCrossPrefabReferences(depthSearchIntField.value);
                 FindScriptReferences(depthSearchIntField.value);
@@ -249,79 +257,79 @@ namespace FabulousReplacer
             root.Add(initializeButton);
         }
 
-        private void PrepareCopiesAndBackup()
-        {
-            ClearAndRevertBackup();
+        // private void PrepareCopiesAndBackup()
+        // {
+        //     ClearAndRevertBackup();
 
-            // ! oki, operating on copied prefabs would require A LOT of work
-            // ! because copied prefabs keep their old references inside their nested prefabs
-            // ! each of thoose nested references would have to be overriden manualy
-            // ! lots of work
-            // string path = AssetDatabase.GUIDToAssetPath( PREFABS_ORIGINAL_LOCATION );
-            // string[] assetsToCopy = AssetDatabase.FindAssets("", new[] { "Assets/Original/Prefabs/" });
-            // Debug.Log(assetsToCopy.Length);
+        //     // ! oki, operating on copied prefabs would require A LOT of work
+        //     // ! because copied prefabs keep their old references inside their nested prefabs
+        //     // ! each of thoose nested references would have to be overriden manualy
+        //     // ! lots of work
+        //     // string path = AssetDatabase.GUIDToAssetPath( PREFABS_ORIGINAL_LOCATION );
+        //     // string[] assetsToCopy = AssetDatabase.FindAssets("", new[] { "Assets/Original/Prefabs/" });
+        //     // Debug.Log(assetsToCopy.Length);
 
-            // foreach (var asset in assetsToCopy)
-            // {
-            //     AssetDatabase.CopyAsset(asset, PREFABS_COPY_LOCATION);
-            // }
+        //     // foreach (var asset in assetsToCopy)
+        //     // {
+        //     //     AssetDatabase.CopyAsset(asset, PREFABS_COPY_LOCATION);
+        //     // }
 
-            // you cant copyyyy like that baby, references get fukked
-            // FileUtil.CopyFileOrDirectory(PREFABS_ORIGINAL_LOCATION, PREFABS_COPY_LOCATION);
-            // AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
+        //     // you cant copyyyy like that baby, references get fukked
+        //     // FileUtil.CopyFileOrDirectory(PREFABS_ORIGINAL_LOCATION, PREFABS_COPY_LOCATION);
+        //     // AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
 
-            _scriptCopies = new Dictionary<string, string>();
+        //     _scriptCopies = new Dictionary<string, string>();
 
-            //* Handle script backups
-            string scriptsRoot = "Assets/Original/Scripts";
-            string[] files = Directory.GetFiles(scriptsRoot);
+        //     //* Handle script backups
+        //     string scriptsRoot = "Assets/Original/Scripts";
+        //     string[] files = Directory.GetFiles(scriptsRoot);
 
-            string[] directories = Directory.GetDirectories(scriptsRoot, "*", SearchOption.AllDirectories);
+        //     string[] directories = Directory.GetDirectories(scriptsRoot, "*", SearchOption.AllDirectories);
 
-            foreach (var dir in directories)
-            {
-                files.Concat(Directory.GetFiles(dir));
-            }
-            // Debug.Log(files.Length);
+        //     foreach (var dir in directories)
+        //     {
+        //         files.Concat(Directory.GetFiles(dir));
+        //     }
+        //     // Debug.Log(files.Length);
 
-            foreach (var file in files)
-            {
-                if (file.Contains(".cs") && !file.Contains(".meta"))
-                {
-                    try
-                    {
-                        using (var sr = new StreamReader(file))
-                        {
-                            string content = sr.ReadToEnd();
-                            // Debug.Log(content);
-                            _scriptCopies.Add(file, content);
-                        }
-                    }
-                    catch (IOException e)
-                    {
-                        Debug.LogError("The file could not be read:");
-                        Debug.LogError(e.Message);
-                    }
-                }
-            }
+        //     foreach (var file in files)
+        //     {
+        //         if (file.Contains(".cs") && !file.Contains(".meta"))
+        //         {
+        //             try
+        //             {
+        //                 using (var sr = new StreamReader(file))
+        //                 {
+        //                     string content = sr.ReadToEnd();
+        //                     // Debug.Log(content);
+        //                     _scriptCopies.Add(file, content);
+        //                 }
+        //             }
+        //             catch (IOException e)
+        //             {
+        //                 Debug.LogError("The file could not be read:");
+        //                 Debug.LogError(e.Message);
+        //             }
+        //         }
+        //     }
 
-            isBackupMade = true;
-        }
+        //     isBackupMade = true;
+        // }
 
-        private void ClearAndRevertBackup()
-        {
-            isBackupMade = false;
+        // private void ClearAndRevertBackup()
+        // {
+        //     isBackupMade = false;
 
-            if (Directory.Exists(PREFABS_COPY_LOCATION))
-            {
-                //! THIS IS SO UNGODLY ANNOYING, HARDCODING THIS SHTI, JUST DONT USE IT ON DEV
-                //? Oki got this, u must remove a .meta file of a directory before removing that dir
-                //? Then FileUtil works as expected
-                FileUtil.DeleteFileOrDirectory("Assets/Copy/Prefabs.meta"); //! because unity wont let u delete an empty folder while leaving its meta file
-                FileUtil.DeleteFileOrDirectory(PREFABS_COPY_LOCATION);
-                AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
-            }
-        }
+        //     if (Directory.Exists(PREFABS_COPY_LOCATION))
+        //     {
+        //         //! THIS IS SO UNGODLY ANNOYING, HARDCODING THIS SHTI, JUST DONT USE IT ON DEV
+        //         //? Oki got this, u must remove a .meta file of a directory before removing that dir
+        //         //? Then FileUtil works as expected
+        //         FileUtil.DeleteFileOrDirectory("Assets/Copy/Prefabs.meta"); //! because unity wont let u delete an empty folder while leaving its meta file
+        //         FileUtil.DeleteFileOrDirectory(PREFABS_COPY_LOCATION);
+        //         AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
+        //     }
+        // }
 
         private void LoadAllPrefabs()
         {
@@ -484,8 +492,26 @@ namespace FabulousReplacer
 
             var isCompiling = new Button(() =>
             {
-                bool isCompiling = EditorApplication.isCompiling;
-                DisplayInBox(GetTextElement(isCompiling.ToString()));
+                var msb = new MultilineStringBuilder("Stuff");
+
+                string[] paths = AssetDatabase.FindAssets("DeeplyNested");
+                string objectsPath = AssetDatabase.GUIDToAssetPath(paths[0]);
+                var asset = AssetDatabase.LoadAssetAtPath(objectsPath, typeof(Component)) as Component;
+                msb.AddLine(asset.name);
+                List<MonoBehaviour> scripts = new List<MonoBehaviour>();
+                asset.gameObject.TryGetScripts(scripts);
+                foreach (var mono in scripts)
+                {
+                    Type newType = mono.GetType();
+                    Debug.Log(newType);
+                    var fields2 = newType.GetFields(ReferenceFinder.FIELD_SEARCH_FLAGS);
+                    foreach (var field in fields2)
+                    {
+                        Debug.Log(field.Name);
+                    }
+                }
+
+                DisplayInBox(GetTextElement(msb.ToString()));
             })
             { text = "Is editor compiling" };
             box.Add(isCompiling);
@@ -632,16 +658,37 @@ namespace FabulousReplacer
             bool logthisone = true;
             currentDepth++;
 
+            // msb.AddLine(PrefabUtility.)
+
             List<TextRefernce> textRefernces = new List<TextRefernce>(localTextComponents.Count);
 
             foreach (Text text in localTextComponents)
             {
-                TextRefernce textRef = new TextRefernce(text);
+                string prefabPath = AssetDatabase.GetAssetPath(prefab);
+                Debug.Log(prefabPath);
+
+                TextRefernce textRef = new TextRefernce(prefabPath, text);
                 textRefernces.Add(textRef);
                 _replaceCounter.updatedTextComponentCount++;
 
                 //! 1. Internal text component references
                 //* Considering simplest case when text component is only referenced within a single prefabvb
+
+                foreach (MonoBehaviour mono in _customMonobehavioursByPrefab[prefab])
+                {
+                    if (mono.IsReferencingComponent(anotherComponent: text, out string fieldName))
+                    {
+                        var updatedAsstReference = new UpdatedReference();
+                        updatedAsstReference.originalPrefab = prefab;
+                        updatedAsstReference.originalText = text;
+                        updatedAsstReference.monoType = mono.GetType();
+                        updatedAsstReference.fieldName = fieldName;
+                        updatedAsstReference.SaveMonoBehaviourAddress(prefab, mono);
+                        updatedAsstReference.SaveReferencedTextAddress(prefab, text);
+                        UpdatedReferenceAddressBook[prefabPath].Add(updatedAsstReference);
+                    }
+                }
+
                 if (prefab.TryExtractTextReferences(text, _customMonobehavioursByPrefab[prefab], out List<MonoBehaviour> textReferences))
                 {
                     textRef.SetLocalTextReferences(textReferences);
