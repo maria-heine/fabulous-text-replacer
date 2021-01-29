@@ -156,7 +156,17 @@ namespace FabulousReplacer
             while (!object.ReferenceEquals(root, g))
             {
                 path.Push(g.transform.GetSiblingIndex());
-                g = g.transform.parent.gameObject;
+
+                if (g.transform.parent != null)
+                {
+                    g = g.transform.parent.gameObject;
+                }
+                else break;
+            }
+
+            if (!object.ReferenceEquals(root, g))
+            {
+                Debug.LogError($"Failed to find component {component} address in {root}");
             }
 
             return path;
@@ -168,7 +178,15 @@ namespace FabulousReplacer
             GameObject addresee = root;
             while (address.Count > 0)
             {
-                addresee = addresee.transform.GetChild(address.Pop()).gameObject;
+                int index = address.Pop();
+                if (addresee.transform.childCount > index)
+                {
+                    addresee = addresee.transform.GetChild(index).gameObject;
+                }
+                else
+                {
+                    Debug.LogError($"Failed to find object at given address for {root.name}, {addresee.name} does not have a child at index {index}");
+                }
             }
             return addresee;
         }

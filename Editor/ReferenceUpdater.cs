@@ -28,53 +28,84 @@ namespace FabulousReplacer
         {
             foreach (var kvp in _updatedReferenceAddressBook)
             {
-                string prefabPath = kvp.Key;
-                Component prefab = AssetDatabase.LoadAssetAtPath(prefabPath, typeof(Component)) as Component;
-
-                AssetDatabase.StartAssetEditing();
-
-                foreach (UpdatedReference reference in kvp.Value)
+                try
                 {
-                    Type type = Type.GetType(reference.monoAssemblyName);
+                    //! Super important, you need to save and reimport asset before closing edition
+                    //! Otherwise a newly loaded asset will remove the past
+                    // AssetDatabase.StartAssetEditing();
 
-                    Component mono = FabulousExtensions
-                        .GetGameObjectAtAddress(prefab.gameObject, reference.MonoAddress)
-                        .GetComponent(type);
+                    string prefabPath = kvp.Key;
+                    Component prefab = AssetDatabase.LoadAssetAtPath(prefabPath, typeof(Component)) as Component;
 
-                    if (mono = null)
+                    Debug.Log($"<color=red>Updating for {prefabPath}</color>");
+
+                    foreach (UpdatedReference reference in kvp.Value)
                     {
-                        Debug.LogError($"Failed to find mono by its address for prefab: {prefab} at path {prefabPath}");
-                    }
+                        Type type = Type.GetType(reference.monoAssemblyName);
+                        Debug.Log($"<color=yellow>mono: {reference.monoAssemblyName} : {reference.fieldName}</color>");
 
-                    TextMeshProUGUI newTextComponent = FabulousExtensions
-                        .GetGameObjectAtAddress(prefab.gameObject, reference.ReferencedTextAddress)
-                        .GetComponent<TextMeshProUGUI>();
+                        Component usedPrefab;
+                        string usedPath;
 
-                    if (newTextComponent = null)
-                    {
-                        Debug.LogError($"Failed to find TMPRO by its address for prefab: {prefab} at path {prefabPath}");
-                    }
-
-                    foreach (var field in type.GetFields(ReferenceFinder.FIELD_SEARCH_FLAGS))
-                    {
-                        if (field.Name == $"{reference.fieldName}{TMPRO_TEXT_SUFFIX}")
+                        if (prefabPath == reference.prefabPath)
                         {
-                            Debug.Log(mono);
-                            Debug.Log(newTextComponent);
-                            
-                            field.SetValue(mono, newTextComponent);
+                            Debug.Log($"yas: {reference.referencingPrefab} : {prefab.gameObject}");
+                            usedPath = prefabPath;
+                            usedPrefab = prefab;
                         }
+                        else
+                        {
+                            Debug.Log($"nope: {reference.referencingPrefab} : {prefab.gameObject}");
+                            usedPath = reference.prefabPath;
+                            usedPrefab = AssetDatabase.LoadAssetAtPath(usedPath, typeof(Component)) as Component;
+                        }
+
+                        Component mono = FabulousExtensions
+                            .GetGameObjectAtAddress(usedPrefab.gameObject, reference.MonoAddress)
+                            .GetComponent(type);
+
+                        if (mono == null)
+                        {
+                            Debug.LogError($"Failed to find mono by its address for prefab: {usedPrefab} at path {usedPath}");
+                            continue;
+                        }
+
+                        TextMeshProUGUI newTextComponent = FabulousExtensions
+                            .GetGameObjectAtAddress(usedPrefab.gameObject, reference.ReferencedTextAddress)
+                            .GetComponent<TextMeshProUGUI>();
+
+                        if (newTextComponent == null)
+                        {
+                            Debug.LogError($"Failed to find TMPRO by its address for prefab: {usedPrefab} at path {usedPath}");
+                            continue;
+                        }
+
+                        foreach (var field in type.GetFields(ReferenceFinder.FIELD_SEARCH_FLAGS))
+                        {
+                            if (field.Name == $"{reference.fieldName}{TMPRO_TEXT_SUFFIX}")
+                            {
+                                Debug.Log(field.Name);
+                                Debug.Log(mono, mono.transform);
+                                Debug.Log(newTextComponent, newTextComponent.transform);
+
+                                field.SetValue(mono, newTextComponent);
+                                Debug.Log(field.GetValue(mono));
+                            }
+                        }
+
+                        // ? Consider moving that a step outside if the scirpt execution dies on production
+                        AssetDatabase.SaveAssets();
+                        // ! Super important line of code here
+                        AssetDatabase.ForceReserializeAssets(new string[] { usedPath }, ForceReserializeAssetsOptions.ReserializeAssetsAndMetadata);
+                        AssetDatabase.ImportAsset(usedPath);
+                        AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
+                        // AssetDatabase.StopAssetEditing();
                     }
                 }
-                
-                AssetDatabase.StopAssetEditing();
-                AssetDatabase.SaveAssets();
-                // ! Super important line of code here
-                AssetDatabase.ForceReserializeAssets(new string[] {prefabPath}, ForceReserializeAssetsOptions.ReserializeAssetsAndMetadata );
-                AssetDatabase.ImportAsset(prefabPath);
-                AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
-
-                // ? Consider moving that a step outside if the scirpt execution dies on production
+                finally
+                {
+                    // AssetDatabase.StopAssetEditing();
+                }
             }
         }
     }

@@ -156,6 +156,9 @@ namespace FabulousReplacer
         {
             textReferences = new List<MonoBehaviour>();
 
+
+            
+
             foreach (MonoBehaviour mono in monoBehaviourToCheck)
             {
                 if (mono.IsReferencingComponent(text, out string fieldName))

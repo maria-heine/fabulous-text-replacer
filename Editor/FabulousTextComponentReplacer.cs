@@ -55,9 +55,6 @@ namespace FabulousReplacer
                     _updatedReferenceAddressBook = addressBook as UpdatedReferenceAddressBook;
                 }
 
-                Debug.Log(_updatedReferenceAddressBook.Count());
-                
-
                 return _updatedReferenceAddressBook;
             }
         }
@@ -667,11 +664,11 @@ namespace FabulousReplacer
             {
                 string prefabPath = AssetDatabase.GetAssetPath(prefab);
 
-                if (prefab.name.Contains("PrefabbedText"))
-                {
-                    Debug.Log(prefab.name);
-                    // Debug.Log(text.gameObject.name);
-                }
+                // if (prefab.name.Contains("PrefabbedText"))
+                // {
+                //     Debug.Log(prefab.name);
+                //     // Debug.Log(text.gameObject.name);
+                // }
 
                 TextRefernce textRef = new TextRefernce(prefabPath, text);
                 textRefernces.Add(textRef);
@@ -711,10 +708,10 @@ namespace FabulousReplacer
                     GameObject parentPrefab = kvp.Key;
                     List<Text> textComponentInstances = kvp.Value;
 
-                    if (prefab.name.Contains("PrefabbedText"))
-                    {
-                        Debug.Log(parentPrefab.name);
-                    };
+                    // if (prefab.name.Contains("PrefabbedText"))
+                    // {
+                    //     Debug.Log(parentPrefab.name);
+                    // };
 
                     string otherPrefabPath = AssetDatabase.GetAssetPath(parentPrefab);
 
@@ -728,11 +725,11 @@ namespace FabulousReplacer
                                 UpdatedReference updatedAsstReference = new UpdatedReference(parentPrefab, textInstance, mono, fieldName);
                                 UpdatedReferenceAddressBook[prefabPath].Add(updatedAsstReference);
 
-                                if (prefab.name.Contains("PrefabbedText"))
-                                {
-                                    Debug.Log(mono);
-                                    Debug.Log(fieldName);
-                                };
+                                // if (prefab.name.Contains("PrefabbedText"))
+                                // {
+                                //     Debug.Log(mono);
+                                //     Debug.Log(fieldName);
+                                // };
                             }
                         }
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
 using static FabulousReplacer.FabulousExtensions;
@@ -25,7 +26,8 @@ namespace FabulousReplacer
         // todo solve the problem of one to many references for a text and monobehaviours
         // public string prefabPath;
         [SerializeField] string referencingPrefabName; // just for inspector display puroses
-        public GameObject originalPrefab; //! rename to "referencingPrefab"?
+        public GameObject referencingPrefab; //! rename to "referencingPrefab"?
+        public string prefabPath;
         public string fieldName;
         public string monoAssemblyName;
         public Text originalText;
@@ -96,15 +98,16 @@ namespace FabulousReplacer
             }
         }
 
-        public UpdatedReference(GameObject parentPrefab, Text referencedText, MonoBehaviour referencingMono, string fieldName)
+        public UpdatedReference(GameObject referencingPrefab, Text referencedText, MonoBehaviour referencingMono, string fieldName)
         {
-            referencingPrefabName = parentPrefab.gameObject.name;
-            this.originalPrefab = parentPrefab;
+            referencingPrefabName = referencingPrefab.gameObject.name;
+            prefabPath = AssetDatabase.GetAssetPath(referencingPrefab);
+            this.referencingPrefab = referencingPrefab;
             this.originalText = referencedText;
             this.MonoType = referencingMono.GetType();
             this.fieldName = fieldName;
-            MonoAddress = GetComponentAddressInHierarchy(parentPrefab, referencingMono);
-            ReferencedTextAddress = GetComponentAddressInHierarchy(parentPrefab, referencedText);
+            MonoAddress = GetComponentAddressInHierarchy(referencingPrefab, referencingMono);
+            ReferencedTextAddress = GetComponentAddressInHierarchy(referencingPrefab, referencedText);
         }
     }
 }

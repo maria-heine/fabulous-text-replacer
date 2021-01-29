@@ -78,7 +78,7 @@ namespace FabulousReplacer
 
                     foreach (UpdatedReference reference in kvp.Value)
                     {
-                        Debug.Log(reference.originalPrefab);
+                        Debug.Log(reference.referencingPrefab);
                         Debug.Log(reference.originalText);
                     }
                 }
@@ -219,15 +219,16 @@ namespace FabulousReplacer
             Stack<int> textLocation = new Stack<int>(updatedReference.ReferencedTextAddress);
             string originalText = updatedReference.originalText.text;
 
-            GameObject textParent = FabulousExtensions.GetGameObjectAtAddress(updatedReference.originalPrefab, textLocation);
+            GameObject textParent = FabulousExtensions.GetGameObjectAtAddress(updatedReference.referencingPrefab, textLocation);
 
-            Debug.Log($"trying to get text field on prefab {updatedReference.originalPrefab} : {textParent.name}");
+            Debug.Log($"trying to get text field on prefab {updatedReference.referencingPrefab} : {textParent.name}");
             if (textParent.TryGetComponent<Text>(out Text text))
             {
                 UnityEngine.Object.DestroyImmediate(updatedReference.originalText, true);
                 TextMeshProUGUI newText = textParent.AddComponent<TextMeshProUGUI>();
                 newText.text = originalText;
                 newTMProComponent = newText;
+                
             }
             else
             {
