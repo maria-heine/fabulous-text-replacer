@@ -12,24 +12,24 @@ using System.IO;
 using System.Text.RegularExpressions;
 using System.Text;
 using UnityEngine.UI;
-using System.Reflection;
-using System.Threading.Tasks;
 
 namespace FabulousReplacer
 {
     public class ComponentReplacer
     {
         List<TextRefernce> _textReferences;
-        Button _updateComponentsButton;
         UpdatedReferenceAddressBook _updatedReferenceAddressBook;
         Dictionary<Type,List<string>> _updatedMonoFields;
 
         public ComponentReplacer(UpdatedReferenceAddressBook updatedReferenceAddressBook, Button updateComponentsButton)
         {
             _updatedReferenceAddressBook = updatedReferenceAddressBook;
-            _updateComponentsButton = updateComponentsButton;
             _updatedMonoFields = new Dictionary<Type, List<string>>();
-            SetupButtons();
+
+            updateComponentsButton.clicked += () =>
+            {
+                RunReplaceLogic();
+            };
         }
 
         public void SetReplacerTextReferences(List<TextRefernce> textReferences)
@@ -37,23 +37,13 @@ namespace FabulousReplacer
             _textReferences = textReferences;
         }
 
-        private void SetupButtons()
-        {
-            _updateComponentsButton.clicked += () =>
-            {
-                // EditorCoroutineUtility.StartCoroutine(RunReplaceLogic(), editorWindow);
-                RunReplaceLogic();
-                // _updateReferencesButton.visible = true;
-            };
-        }
+        // TODO What about private Text fields?
 
-        // private IEnumerator RunReplaceLogic()
+        // ! I am still missing the case of text components that dont have references at all
         private void RunReplaceLogic()
         {
             // 1. original text component shouldn't be updated before all its past references are saved somewhere
             // otherwise it will be impossible to know who else needs reference update
-            TextRefernce testReference = _textReferences[0];
-
 
             foreach (var kvp in _updatedReferenceAddressBook)
             {
@@ -61,15 +51,19 @@ namespace FabulousReplacer
 
                 foreach (UpdatedReference reference in kvp.Value)
                 {
-                    // This is easy in case of MonoBehaviours since their filename must match the calssname
+                    // if (reference.originalPrefab.name.Contains("DeeplyNested"))
+                    // {
+                    //     Debug.Log(reference.originalPrefab.name);
+                        
+                    // }
                     // * Step: Update script
                     // TODO Alternate behaviour when the script was already modified for that field name
                     // TODO I can't
-                    UpdateScript(reference.monoType, reference.fieldName);
+                    UpdateScript(reference.MonoType, reference.fieldName);
                     // AssetDatabase.
 
                     // * Step: Replace component
-                    // TODO What if that (oops! that cant be immediately removed here)
+                    // ! What if that (oops! that cant be immediately removed here)
                     ReplaceTextComponent(reference, out TextMeshProUGUI newTMProComponent);
                 }
             }
@@ -91,41 +85,6 @@ namespace FabulousReplacer
             };
 
             CompilationPipeline.RequestScriptCompilation();
-
-
-            // foreach (MonoBehaviour localReference in testReference.localTextReferences)
-            // {
-            //     Type monoType = localReference.GetType();
-            //     string scriptFileName = monoType.Name;
-            //     string asmName = monoType.AssemblyQualifiedName;
-
-            //     // This is easy in case of MonoBehaviours since their filename must match the calssname
-            //     // * Step: Update script
-            //     UpdateScript(testReference, localReference, out string newFieldName);
-            //     // AssetDatabase.
-
-            //     // * Step: Replace component
-            //     ReplaceTextComponent(testReference, out TextMeshProUGUI newTMProComponent);
-            //     testReference.updatedTMProText = newTMProComponent;
-
-            //     AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate | ImportAssetOptions.ForceSynchronousImport);
-
-            //     // * Step: Update new component references
-            //     // TODO
-            //     Debug.Log(EditorApplication.isCompiling);
-
-            // }
-        }
-
-        private static void TestFields(Type monoType, string newFieldName, TextRefernce refernce)
-        {
-            Debug.Log("Testing fields");
-            FieldInfo newTMProField = monoType.GetField("serializedTextFieldTMPro", ReferenceFinder.FIELD_SEARCH_FLAGS);
-            FieldInfo testField = monoType.GetField("TestIntField", ReferenceFinder.FIELD_SEARCH_FLAGS);
-            FieldInfo serializedTextField = monoType.GetField("serializedTextField", ReferenceFinder.FIELD_SEARCH_FLAGS);
-            if (newTMProField == null) Debug.Log("this is bad");
-            if (testField == null) Debug.Log("huh!");
-            if (serializedTextField == null) Debug.Log("shouldnt be null!");
         }
 
         //
@@ -149,8 +108,8 @@ namespace FabulousReplacer
                 _updatedMonoFields[monoType].Add(fieldName);
             }
 
+            //* This is easy in case of MonoBehaviours since their filename must match the calssname
             string scriptFileName = monoType.Name;
-
             string[] assets = AssetDatabase.FindAssets($"{scriptFileName}");
             var path = AssetDatabase.GUIDToAssetPath(assets[0]);
 
@@ -167,38 +126,6 @@ namespace FabulousReplacer
             SaveUpdateScript(path, lines);
 
             fieldName = $"{fieldName}TMPro";
-        }
-
-        private static void UpdateScript(TextRefernce textReference, MonoBehaviour localReference, out string newFieldName)
-        {
-            Type scriptType = localReference.GetType();
-            string scriptFileName = scriptType.Name;
-
-            string[] assets = AssetDatabase.FindAssets($"{scriptFileName}");
-            var path = AssetDatabase.GUIDToAssetPath(assets[0]);
-
-            if (assets.Length != 1)
-            {
-                Debug.LogError("Well, really we shouldn't find less or more than exactly one asset like that");
-            }
-            else if (AssetDatabase.GetMainAssetTypeAtPath(path) != typeof(UnityEditor.MonoScript))
-            {
-                Debug.LogError($"What on earth did you find? path: {path}");
-            }
-
-            //TODO make tests if it correctly works with _ underscore names
-            string fieldName = textReference.originalPrefabText.GetFieldNameForAComponent(owner: localReference);
-
-            List<string> lines = GetUpdatedScriptLines(path, fieldName);
-            SaveUpdateScript(path, lines);
-
-            newFieldName = $"{fieldName}TMPro";
-
-            // AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate | ImportAssetOptions.ForceSynchronousImport);
-            // AssetDatabase.ImportAsset(path);
-
-            // TODO temporarily disabled
-            // AssetDatabase.Refresh();
         }
 
         private static List<string> GetUpdatedScriptLines(string path, string fieldName)
@@ -289,7 +216,7 @@ namespace FabulousReplacer
 
         private void ReplaceTextComponent(UpdatedReference updatedReference, out TextMeshProUGUI newTMProComponent)
         {
-            Stack<int> textLocation = new Stack<int>(updatedReference.referencedTextAddress);
+            Stack<int> textLocation = new Stack<int>(updatedReference.ReferencedTextAddress);
             string originalText = updatedReference.originalText.text;
 
             GameObject textParent = FabulousExtensions.GetGameObjectAtAddress(updatedReference.originalPrefab, textLocation);

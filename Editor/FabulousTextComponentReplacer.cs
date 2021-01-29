@@ -55,6 +55,9 @@ namespace FabulousReplacer
                     _updatedReferenceAddressBook = addressBook as UpdatedReferenceAddressBook;
                 }
 
+                Debug.Log(_updatedReferenceAddressBook.Count());
+                
+
                 return _updatedReferenceAddressBook;
             }
         }
@@ -166,7 +169,7 @@ namespace FabulousReplacer
             { text = "Analyse prefabs" };
             container.Add(analysePrefabsButton);
 
-            var updateComponentsButton = new Button() 
+            var updateComponentsButton = new Button()
             { text = "Update components" };
             _componentReplacer = new ComponentReplacer(UpdatedReferenceAddressBook, updateComponentsButton);
             // updateComponentsButton.visible = false;
@@ -658,14 +661,17 @@ namespace FabulousReplacer
             bool logthisone = true;
             currentDepth++;
 
-            // msb.AddLine(PrefabUtility.)
-
             List<TextRefernce> textRefernces = new List<TextRefernce>(localTextComponents.Count);
 
             foreach (Text text in localTextComponents)
             {
                 string prefabPath = AssetDatabase.GetAssetPath(prefab);
-                Debug.Log(prefabPath);
+
+                if (prefab.name.Contains("PrefabbedText"))
+                {
+                    Debug.Log(prefab.name);
+                    // Debug.Log(text.gameObject.name);
+                }
 
                 TextRefernce textRef = new TextRefernce(prefabPath, text);
                 textRefernces.Add(textRef);
@@ -678,17 +684,12 @@ namespace FabulousReplacer
                 {
                     if (mono.IsReferencingComponent(anotherComponent: text, out string fieldName))
                     {
-                        var updatedAsstReference = new UpdatedReference();
-                        updatedAsstReference.originalPrefab = prefab;
-                        updatedAsstReference.originalText = text;
-                        updatedAsstReference.monoType = mono.GetType();
-                        updatedAsstReference.fieldName = fieldName;
-                        updatedAsstReference.SaveMonoBehaviourAddress(prefab, mono);
-                        updatedAsstReference.SaveReferencedTextAddress(prefab, text);
+                        UpdatedReference updatedAsstReference = new UpdatedReference(prefab, text, mono, fieldName);
                         UpdatedReferenceAddressBook[prefabPath].Add(updatedAsstReference);
                     }
                 }
 
+                // TODO remove this thing, it only does the counitng now
                 if (prefab.TryExtractTextReferences(text, _customMonobehavioursByPrefab[prefab], out List<MonoBehaviour> textReferences))
                 {
                     textRef.SetLocalTextReferences(textReferences);
@@ -706,11 +707,36 @@ namespace FabulousReplacer
                 // It is a list of Text components because parentPrefab may hold multiple references to that Text Component
                 foreach (var kvp in GetAllTextInstances(prefab, text))
                 {
+                    // * Clean this up, extract the recurring method
                     GameObject parentPrefab = kvp.Key;
                     List<Text> textComponentInstances = kvp.Value;
 
+                    if (prefab.name.Contains("PrefabbedText"))
+                    {
+                        Debug.Log(parentPrefab.name);
+                    };
+
+                    string otherPrefabPath = AssetDatabase.GetAssetPath(parentPrefab);
+
                     foreach (Text textInstance in textComponentInstances)
                     {
+                        foreach (MonoBehaviour mono in _customMonobehavioursByPrefab[parentPrefab])
+                        {
+                            if (mono.IsReferencingComponent(anotherComponent: textInstance, out string fieldName))
+                            {
+                                //! should be original prefab instead
+                                UpdatedReference updatedAsstReference = new UpdatedReference(parentPrefab, textInstance, mono, fieldName);
+                                UpdatedReferenceAddressBook[prefabPath].Add(updatedAsstReference);
+
+                                if (prefab.name.Contains("PrefabbedText"))
+                                {
+                                    Debug.Log(mono);
+                                    Debug.Log(fieldName);
+                                };
+                            }
+                        }
+
+                        // TODO Remove all below
                         bool foundMonobehaviourReferences = parentPrefab
                             .TryExtractTextReferences(
                                 text: textInstance,
@@ -738,21 +764,6 @@ namespace FabulousReplacer
             if (logthisone) PrintPrefabAnalysis(prefab, textRefernces, msb, localTextComponents);
 
             return textRefernces;
-            ////todo Test overwwrite some field
-            //var tempmonolist = new List<MonoBehaviour>();
-            //if (prefab.TryGetScripts(tempmonolist))
-            //{
-            //    foreach (var mono in tempmonolist)
-            //    {
-            //        if (mono.GetType().Name.Contains("PublicField"))
-            //        {
-            //            // Debug.Log($"Found a public field scriptin {prefab.name}");
-            //            mono.GetType().GetField("SomeOtherString").SetValue(mono, "yay!");
-            //            AssetDatabase.SaveAssets();
-            //        }
-            //    }
-            //}
-
         }
 
         private bool UpdateCountLogger(bool logthisone, List<MonoBehaviour> textReferences)

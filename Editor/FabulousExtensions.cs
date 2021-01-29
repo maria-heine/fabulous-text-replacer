@@ -18,8 +18,6 @@ namespace FabulousReplacer
         public static VisualElement GetTextBlock(List<string> textParts)
         {
             VisualElement el = new VisualElement();
-            Debug.Log(textParts.Count);
-
 
             foreach (var textPiece in textParts)
             {
