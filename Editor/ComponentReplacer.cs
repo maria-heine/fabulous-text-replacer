@@ -210,7 +210,7 @@ namespace FabulousReplacer
             // * Don't even think of performing below operations on previously saved prefabs loaded into the memory
             // * They are like lost souls that want to trap your innocent code
             // * Whatever you execute on them gets lost in a limbo and flushed down along the garbage collection
-            // * If you want to edit a prefab, make sure you just loaded it and you work on a healthy instance
+            // * If you want to edit a prefab, make sure you just loaded it and you work on a fresh, crunchy instance
             Component prefab = AssetDatabase.LoadAssetAtPath(updatedReference.prefabPath, typeof(Component)) as Component;
 
             Text oldText = FabulousExtensions
@@ -241,6 +241,7 @@ namespace FabulousReplacer
             newText.color = textInfo.FontColor;
             newText.enableWordWrapping = true;
             AssetDatabase.SaveAssets();
+            //* You may think the line below is not important but I've lost 4hours of work debugging why nested prefabs don't save their changes
             AssetDatabase.ForceReserializeAssets(new string[] { updatedReference.prefabPath }, ForceReserializeAssetsOptions.ReserializeAssetsAndMetadata);
             AssetDatabase.ImportAsset(updatedReference.prefabPath);
         }
