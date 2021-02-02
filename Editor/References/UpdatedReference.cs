@@ -22,15 +22,15 @@ namespace FabulousReplacer
     [System.Serializable]
     public class UpdatedReference
     {
-
         // todo solve the problem of one to many references for a text and monobehaviours
-        // public string prefabPath;
-        [SerializeField] string referencingPrefabName; // just for inspector display puroses
-        public GameObject referencingPrefab; //! rename to "referencingPrefab"?
+        [SerializeField] string rootPrefabName; // just for inspector display puroses
+        public bool isReferenced;
+        public GameObject rootPrefab; 
         public string prefabPath;
         public string fieldName;
         public string monoAssemblyName;
         public Text originalText;
+        public TextInformation textInformation;
 
         [SerializeField] List<int> monoAddress;
         public Stack<int> MonoAddress
@@ -98,16 +98,28 @@ namespace FabulousReplacer
             }
         }
 
+        public UpdatedReference(GameObject rootPrefab, Text unreferencedText)
+        {
+            rootPrefabName = rootPrefab.gameObject.name;
+            textInformation = new TextInformation(unreferencedText);
+            prefabPath = AssetDatabase.GetAssetPath(rootPrefab);
+            this.rootPrefab = rootPrefab;
+            this.originalText = unreferencedText;
+            isReferenced = false;
+        }
+
         public UpdatedReference(GameObject referencingPrefab, Text referencedText, MonoBehaviour referencingMono, string fieldName)
         {
-            referencingPrefabName = referencingPrefab.gameObject.name;
+            rootPrefabName = referencingPrefab.gameObject.name;
             prefabPath = AssetDatabase.GetAssetPath(referencingPrefab);
-            this.referencingPrefab = referencingPrefab;
+            textInformation = new TextInformation(referencedText);
+            this.rootPrefab = referencingPrefab;
             this.originalText = referencedText;
             this.MonoType = referencingMono.GetType();
             this.fieldName = fieldName;
             MonoAddress = GetComponentAddressInHierarchy(referencingPrefab, referencingMono);
             ReferencedTextAddress = GetComponentAddressInHierarchy(referencingPrefab, referencedText);
+            isReferenced = true;
         }
     }
 }

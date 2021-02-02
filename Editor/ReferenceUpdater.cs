@@ -41,6 +41,11 @@ namespace FabulousReplacer
 
                     foreach (UpdatedReference reference in kvp.Value)
                     {
+                        if (!reference.isReferenced)
+                        {
+                            continue;
+                        }
+
                         Type type = Type.GetType(reference.monoAssemblyName);
                         Debug.Log($"<color=yellow>mono: {reference.monoAssemblyName} : {reference.fieldName}</color>");
 
@@ -49,13 +54,13 @@ namespace FabulousReplacer
 
                         if (prefabPath == reference.prefabPath)
                         {
-                            Debug.Log($"yas: {reference.referencingPrefab} : {prefab.gameObject}");
+                            Debug.Log($"yas: {reference.rootPrefab} : {prefab.gameObject}");
                             usedPath = prefabPath;
                             usedPrefab = prefab;
                         }
                         else
                         {
-                            Debug.Log($"nope: {reference.referencingPrefab} : {prefab.gameObject}");
+                            Debug.Log($"nope: {reference.rootPrefab} : {prefab.gameObject}");
                             usedPath = reference.prefabPath;
                             usedPrefab = AssetDatabase.LoadAssetAtPath(usedPath, typeof(Component)) as Component;
                         }

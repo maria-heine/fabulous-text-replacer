@@ -19,7 +19,9 @@ namespace FabulousReplacer
     {
         List<TextRefernce> _textReferences;
         UpdatedReferenceAddressBook _updatedReferenceAddressBook;
-        Dictionary<Type,List<string>> _updatedMonoFields;
+        Dictionary<Type, List<string>> _updatedMonoFields;
+
+        TMP_FontAsset fontAsset;
 
         public ComponentReplacer(UpdatedReferenceAddressBook updatedReferenceAddressBook, Button updateComponentsButton)
         {
@@ -30,6 +32,8 @@ namespace FabulousReplacer
             {
                 RunReplaceLogic();
             };
+
+            fontAsset = AssetDatabase.LoadAssetAtPath("Assets/TextMesh Pro/Resources/Fonts & Materials/LiberationSans SDF.asset", typeof(TMP_FontAsset)) as TMP_FontAsset;
         }
 
         public void SetReplacerTextReferences(List<TextRefernce> textReferences)
@@ -42,46 +46,32 @@ namespace FabulousReplacer
         // ! I am still missing the case of text components that dont have references at all
         private void RunReplaceLogic()
         {
-            // 1. original text component shouldn't be updated before all its past references are saved somewhere
-            // otherwise it will be impossible to know who else needs reference update
-
             foreach (var kvp in _updatedReferenceAddressBook)
             {
                 string prefabPath = kvp.Key;
 
                 foreach (UpdatedReference reference in kvp.Value)
                 {
-                    // if (reference.originalPrefab.name.Contains("DeeplyNested"))
-                    // {
-                    //     Debug.Log(reference.originalPrefab.name);
-                        
-                    // }
                     // * Step: Update script
                     // TODO Alternate behaviour when the script was already modified for that field name
                     // TODO I can't
-                    UpdateScript(reference.MonoType, reference.fieldName);
+                    if (reference.isReferenced)
+                    {
+                        UpdateScript(reference.MonoType, reference.fieldName);
+                    }
                     // AssetDatabase.
 
                     // * Step: Replace component
                     // ! What if that (oops! that cant be immediately removed here)
-                    ReplaceTextComponent(reference, out TextMeshProUGUI newTMProComponent);
+                    ReplaceTextComponent(reference);
+
+                    AssetDatabase.SaveAssets();
                 }
             }
 
-            AssetDatabase.SaveAssets();
-
             CompilationPipeline.compilationFinished += stuff =>
             {
-                foreach (var kvp in _updatedReferenceAddressBook)
-                {
-                    Debug.Log(kvp.Key);
 
-                    foreach (UpdatedReference reference in kvp.Value)
-                    {
-                        Debug.Log(reference.referencingPrefab);
-                        Debug.Log(reference.originalText);
-                    }
-                }
             };
 
             CompilationPipeline.RequestScriptCompilation();
@@ -214,39 +204,40 @@ namespace FabulousReplacer
 
         #endregion // SCRIPT REPLACEMENT
 
-        private void ReplaceTextComponent(UpdatedReference updatedReference, out TextMeshProUGUI newTMProComponent)
+        //
+        // ─── TEXT COMPONENT REPLACEMENT ──────────────────────────────────
+        //
+
+        #region TEXT COMPONENT REPLACEMENT
+
+        private void ReplaceTextComponent(UpdatedReference updatedReference)
         {
-            Stack<int> textLocation = new Stack<int>(updatedReference.ReferencedTextAddress);
-            string originalText = updatedReference.originalText.text;
-
-            GameObject textParent = FabulousExtensions.GetGameObjectAtAddress(updatedReference.referencingPrefab, textLocation);
-
-            Debug.Log($"trying to get text field on prefab {updatedReference.referencingPrefab} : {textParent.name}");
-            if (textParent.TryGetComponent<Text>(out Text text))
+            if (updatedReference.originalText == null)
             {
-                UnityEngine.Object.DestroyImmediate(updatedReference.originalText, true);
-                TextMeshProUGUI newText = textParent.AddComponent<TextMeshProUGUI>();
-                newText.text = originalText;
-                newTMProComponent = newText;
-                
+                return;
             }
             else
             {
-                newTMProComponent = textParent.GetComponent<TextMeshProUGUI>();
+                Debug.Log($"Replacing text {updatedReference.originalText}, for: {updatedReference.originalText.transform.root.name}");
             }
+
+            Debug.Log($"{updatedReference.originalText} size {updatedReference.textInformation.FontSize}");
+            UnityEngine.Object.DestroyImmediate(updatedReference.originalText, true);
+
+            TextInformation textInfo = updatedReference.textInformation;
+
+            TextMeshProUGUI newText = textInfo.Parent.AddComponent<TextMeshProUGUI>();
+
+            AssetDatabase.StartAssetEditing();
+            newText.text = textInfo.Text;
+            newText.alignment = textInfo.TMProAlignment;
+            newText.font = fontAsset;
+            newText.fontSize = (float)textInfo.FontSize;
+            newText.color = textInfo.FontColor;
+            AssetDatabase.StopAssetEditing();
+            AssetDatabase.SaveAssets();
         }
 
-        private void ReplaceTextComponent(TextRefernce textRefernce, out TextMeshProUGUI newTMProComponent)
-        {
-            GameObject textParent;
-            textParent = textRefernce.originalPrefabText.gameObject;
-            string originalText = textRefernce.originalPrefabText.text;
-            UnityEngine.Object.DestroyImmediate(textRefernce.originalPrefabText, true);
-
-            TextMeshProUGUI newText = textParent.AddComponent<TextMeshProUGUI>();
-            newText.text = originalText;
-
-            newTMProComponent = newText;
-        }
+        #endregion // TEXT COMPONENT REPLACEMENT
     }
 }
