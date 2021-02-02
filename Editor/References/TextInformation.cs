@@ -4,13 +4,15 @@ using UnityEngine.UI;
 
 namespace FabulousReplacer
 {
+    [System.Serializable]
     public class TextInformation
     {
-        public GameObject Parent { get; set; }
-        public string Text { get; set; }
+        public GameObject Parent;
+        public string Text;
+        public int FontSize;
+        public Color FontColor;
+        
         public TextAnchor Alignment { private get; set; }
-        public int FontSize { get; set; }
-        public Color FontColor { get; set; }
         public TextAlignmentOptions TMProAlignment
         {
             get

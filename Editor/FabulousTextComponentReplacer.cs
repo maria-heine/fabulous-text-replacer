@@ -511,8 +511,9 @@ namespace FabulousReplacer
                 string originalPrefabPath = AssetDatabase.GetAssetPath(originalPrefab);
 
                 // * Always add 
-                UpdatedReference unreferencedTextComponent = new UpdatedReference(originalPrefab, text);
-                UpdatedReferenceAddressBook[originalPrefabPath].Add(unreferencedTextComponent);
+                // TODO test disabled
+                // UpdatedReference unreferencedTextComponent = new UpdatedReference(originalPrefab, text);
+                // UpdatedReferenceAddressBook[originalPrefabPath].Add(unreferencedTextComponent);
 
                 // 1. Internal text component references
                 // Considering simplest case when text component is only referenced within a single prefabvb
@@ -601,8 +602,11 @@ namespace FabulousReplacer
 
         private void SaveTextReferences(string sourcePrefabPath, GameObject prefabParent, Text textComponent)
         {
-            var updatedReferences = CheckTextAgainstFoundMonobehaviours(textComponent, prefabParent);
+            //TODO test part
+            UpdatedReference unreferencedTextComponent = new UpdatedReference(prefabParent, textComponent);
+            UpdatedReferenceAddressBook[sourcePrefabPath].Add(unreferencedTextComponent);
 
+            var updatedReferences = CheckTextAgainstFoundMonobehaviours(textComponent, prefabParent);
             foreach (UpdatedReference updatedReference in updatedReferences)
             {
                 UpdatedReferenceAddressBook[sourcePrefabPath].Add(updatedReference);
@@ -611,9 +615,10 @@ namespace FabulousReplacer
 
         private List<UpdatedReference> CheckTextAgainstFoundMonobehaviours(Text textComponent, GameObject parentPrefab)
         {
-            List<UpdatedReference> updatedReferences = new List<UpdatedReference>(_customMonobehavioursByPrefab[parentPrefab].Count);
+            List<MonoBehaviour> monoBehaviours = _customMonobehavioursByPrefab[parentPrefab];
+            List<UpdatedReference> updatedReferences = new List<UpdatedReference>(monoBehaviours.Count);
 
-            foreach (MonoBehaviour mono in _customMonobehavioursByPrefab[parentPrefab])
+            foreach (MonoBehaviour mono in monoBehaviours)
             {
                 if (mono.IsReferencingComponent(anotherComponent: textComponent, out string fieldName))
                 {

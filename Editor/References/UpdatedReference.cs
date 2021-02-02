@@ -55,7 +55,7 @@ namespace FabulousReplacer
         }
 
         [SerializeField] List<int> referencedTextAddress;
-        public Stack<int> ReferencedTextAddress
+        public Stack<int> TextAddress
         {
             get
             {
@@ -105,6 +105,7 @@ namespace FabulousReplacer
             prefabPath = AssetDatabase.GetAssetPath(rootPrefab);
             this.rootPrefab = rootPrefab;
             this.originalText = unreferencedText;
+            TextAddress = GetComponentAddressInHierarchy(rootPrefab, unreferencedText);
             isReferenced = false;
         }
 
@@ -118,7 +119,7 @@ namespace FabulousReplacer
             this.MonoType = referencingMono.GetType();
             this.fieldName = fieldName;
             MonoAddress = GetComponentAddressInHierarchy(referencingPrefab, referencingMono);
-            ReferencedTextAddress = GetComponentAddressInHierarchy(referencingPrefab, referencedText);
+            TextAddress = GetComponentAddressInHierarchy(referencingPrefab, referencedText);
             isReferenced = true;
         }
     }

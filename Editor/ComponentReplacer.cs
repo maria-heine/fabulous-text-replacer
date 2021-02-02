@@ -32,7 +32,9 @@ namespace FabulousReplacer
                 RunReplaceLogic();
             };
 
-            fontAsset = AssetDatabase.LoadAssetAtPath("Assets/TextMesh Pro/Resources/Fonts & Materials/LiberationSans SDF.asset", typeof(TMP_FontAsset)) as TMP_FontAsset;
+            //TODO REWORK
+            fontAsset = AssetDatabase
+                .LoadAssetAtPath("Assets/TextMesh Pro/Resources/Fonts & Materials/LiberationSans SDF.asset", typeof(TMP_FontAsset)) as TMP_FontAsset;
         }
 
         // TODO What about private Text fields?
@@ -47,15 +49,12 @@ namespace FabulousReplacer
                 {
                     // * Step: Update script
                     // TODO Alternate behaviour when the script was already modified for that field name
-                    // TODO I can't
                     if (reference.isReferenced)
                     {
                         UpdateScript(reference.MonoType, reference.fieldName);
                     }
-                    // AssetDatabase.
 
                     // * Step: Replace component
-                    // ! What if that (oops! that cant be immediately removed here)
                     ReplaceTextComponent(reference);
 
                     AssetDatabase.SaveAssets();
@@ -205,31 +204,45 @@ namespace FabulousReplacer
 
         private void ReplaceTextComponent(UpdatedReference updatedReference)
         {
-            if (updatedReference.originalText == null)
+            TextMeshProUGUI newText;
+            TextInformation textInfo = updatedReference.textInformation;
+            
+            // * Don't even think of performing below operations on previously saved prefabs loaded into the memory
+            // * They are like lost souls that want to trap your innocent code
+            // * Whatever you execute on them gets lost in a limbo and flushed down along the garbage collection
+            // * If you want to edit a prefab, make sure you just loaded it and you work on a healthy instance
+            Component prefab = AssetDatabase.LoadAssetAtPath(updatedReference.prefabPath, typeof(Component)) as Component;
+
+            Text oldText = FabulousExtensions
+                .GetGameObjectAtAddress(prefab.gameObject, updatedReference.TextAddress)
+                .GetComponent<Text>();
+
+            if (oldText != null)
             {
-                return;
+                UnityEngine.Object.DestroyImmediate(oldText, true);
+                newText = textInfo.Parent.AddComponent<TextMeshProUGUI>();
             }
             else
             {
-                Debug.Log($"Replacing text {updatedReference.originalText}, for: {updatedReference.originalText.transform.root.name}");
+                newText = FabulousExtensions
+                    .GetGameObjectAtAddress(prefab.gameObject, updatedReference.TextAddress)
+                    .GetComponent<TextMeshProUGUI>();
+
+                if (updatedReference.textInformation.Text.Contains("ALTERED"))
+                {
+                    Debug.Log($"0 {newText}, {newText.color} {newText}");
+                }
             }
 
-            Debug.Log($"{updatedReference.originalText} size {updatedReference.textInformation.FontSize}");
-            UnityEngine.Object.DestroyImmediate(updatedReference.originalText, true);
-
-            TextInformation textInfo = updatedReference.textInformation;
-
-            TextMeshProUGUI newText = textInfo.Parent.AddComponent<TextMeshProUGUI>();
-
-            AssetDatabase.StartAssetEditing();
             newText.text = textInfo.Text;
             newText.alignment = textInfo.TMProAlignment;
             newText.font = fontAsset;
             newText.fontSize = (float)textInfo.FontSize;
             newText.color = textInfo.FontColor;
             newText.enableWordWrapping = true;
-            AssetDatabase.StopAssetEditing();
             AssetDatabase.SaveAssets();
+            AssetDatabase.ForceReserializeAssets(new string[] { updatedReference.prefabPath }, ForceReserializeAssetsOptions.ReserializeAssetsAndMetadata);
+            AssetDatabase.ImportAsset(updatedReference.prefabPath);
         }
 
         #endregion // TEXT COMPONENT REPLACEMENT
