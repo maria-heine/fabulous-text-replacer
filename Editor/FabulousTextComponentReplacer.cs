@@ -23,8 +23,6 @@ namespace FabulousReplacer
         ! Note that "Assets/Original/Prefabs"
         ! is entirely different than "Assets/Original/Prefabs/"
         */
-        const string PREFABS_ORIGINAL_LOCATION = "Assets/Original/Prefabs";
-        const string PREFABS_COPY_LOCATION = "Assets/Copy/Prefabs";
 
         List<GameObject> _loadedPrefabs;
         Dictionary<GameObject, List<GameObject>> _crossPrefabReferences;
@@ -122,7 +120,6 @@ namespace FabulousReplacer
             /* 
             * Note: This will count both directories and script files as assets
             */
-
             string[] assets = AssetDatabase.FindAssets("t:Object", new[] { SEARCH_DIRECTORY });
 
             Debug.Log($"Found {assets.Length} assets.");
@@ -246,7 +243,7 @@ namespace FabulousReplacer
                 }
             }
         }
-        
+
         private void DrawReplacerButtons(VisualElement root)
         {
             var container = new Box();
@@ -254,7 +251,7 @@ namespace FabulousReplacer
 
             var label = new Label() { text = "Replacer" };
             container.Add(label);
-            
+
             Button initializeButton = new Button(() =>
             {
                 //* Where to search for prefabs (depending on whether we make a backup or not)
@@ -288,8 +285,6 @@ namespace FabulousReplacer
 
             analysePrefabsButton.clicked += () =>
             {
-                List<TextRefernce> textReferences = new List<TextRefernce>();
-
                 List<string> analysisResultsParts = new List<string>();
 
                 int currentDepth = 0;
@@ -305,12 +300,7 @@ namespace FabulousReplacer
 
                     if (analysisDepth.value != -1 && currentDepth >= analysisDepth.value) break;
 
-                    List<TextRefernce> resultReferences = AnalyzePrefab(prefab, msb, ref currentDepth);
-
-                    if (resultReferences != null)
-                    {
-                        textReferences.AddRange(resultReferences);
-                    }
+                    AnalyzePrefab(prefab, msb, ref currentDepth);
                 }
 
                 analysisResultsParts.Add(msb.ToString());
@@ -318,11 +308,9 @@ namespace FabulousReplacer
                 UpgradeProgressBar.Invoke();
 
                 DisplayInBox(GetTextBlock(analysisResultsParts));
-
-                _componentReplacer.SetReplacerTextReferences(textReferences);
             };
         }
-        
+
         private void DrawProgressStatus(Box menuBox)
         {
             var container = new Box();
@@ -389,7 +377,7 @@ namespace FabulousReplacer
             var logOverridesButton = new Button(() =>
             {
                 var msb = new MultilineStringBuilder("Log nested prefabs with overrides");
-                
+
                 foreach (var item in _nestedPrefabs)
                 {
                     bool loggedOverride = false;
@@ -403,7 +391,7 @@ namespace FabulousReplacer
                             loggedOverride = true;
                             msb.AddLine($"{item.Key.gameObject.name} has overrides at:");
                         }
-                        
+
                         if (hasOverrides)
                         {
                             msb.AddLine($"---> {nested.name}");
@@ -498,13 +486,76 @@ namespace FabulousReplacer
 
         #endregion // LOGGING
 
+        //
+        // ─── ANALYSIS ────────────────────────────────────────────────────
+        //
+
         #region ANALYSIS
 
+        private void AnalyzePrefab(GameObject originalPrefab, MultilineStringBuilder msb, ref int currentDepth)
+        {
+            // Skips execition if there were no text components found in the hierarchy
+            if (!originalPrefab.TryGetComponentsInChildren(out List<Text> localTextComponents, skipNestedPrefabs: true))
+            {
+                return;
+            }
+            else
+            {
+                currentDepth++;
+            }
+
+            bool logthisone = true;
+
+            foreach (Text text in localTextComponents)
+            {
+                string originalPrefabPath = AssetDatabase.GetAssetPath(originalPrefab);
+
+                // * Always add 
+                UpdatedReference unreferencedTextComponent = new UpdatedReference(originalPrefab, text);
+                UpdatedReferenceAddressBook[originalPrefabPath].Add(unreferencedTextComponent);
+
+                // 1. Internal text component references
+                // Considering simplest case when text component is only referenced within a single prefabvb
+                SaveTextReferences(originalPrefabPath, originalPrefab, text);
+
+                // 2. Text components referenced by nested prefabs
+                // 3. Text components of prefabs that are reference by the other nested prefabs
+                // X???. Text components of prefabs that are referenced by parent of a parent OR by a nested prefab of a parent of a parent OOF
+
+                // 4. Foreign text component references
+                // Get all instances of a Text component along with the parentPrefab that is holding them
+                // It is a list of Text components because parentPrefab may hold multiple references to that Text Component
+                foreach (var kvp in GetAllTextInstances(originalPrefab, text))
+                {
+                    // * Clean this up, extract the recurring method
+                    GameObject instanceParentPreafab = kvp.Key;
+                    List<Text> textComponentInstances = kvp.Value;
+
+                    foreach (Text textInstance in textComponentInstances)
+                    {
+                        SaveTextReferences(originalPrefabPath, instanceParentPreafab, textInstance);
+
+                        // TODO take care of logging if needed
+                        // logthisone = UpdateCountLogger(logthisone, textInstanceReferences);
+
+                        // ? This is because the counter will
+                        _replaceCounter.updatedTextComponentCount++;
+                    }
+                }
+            }
+
+            if (logthisone) PrintPrefabAnalysis(originalPrefab, msb, localTextComponents);
+        }
+
         /// <summary>
-        /// 
+        /// Core logic of gathering a dictionary of parent prefab GameObjects along with a list of text component instances
+        /// of a passed in originalPrefab and it's text component.
+        /// I admit this could have been refactored to look cleaner than this maddness.
+        /// The difficulty of algorithm could be simplified probably by doing it in a barch for all the text components of the 
+        /// original prefab at once, but well, we aren't dealing with millions of components.
         /// </summary>
-        /// <param name="originalPrefab"></param>
-        /// <param name="originalText"></param>
+        /// <param name="originalPrefab">The original prefab we want to look for in other prefabs</param>
+        /// <param name="originalText">It's text component we are interested in</param>
         /// <returns>Returns a dictionary of prefabs referencing an instance of the originalPrefab with a list of it's specific Text components being referenced</returns>
         private Dictionary<GameObject, List<Text>> GetAllTextInstances(GameObject originalPrefab, Text originalText)
         {
@@ -548,120 +599,35 @@ namespace FabulousReplacer
             return prefabTextInstances;
         }
 
-        private List<TextRefernce> AnalyzePrefab(GameObject prefab, MultilineStringBuilder msb, ref int currentDepth)
+        private void SaveTextReferences(string sourcePrefabPath, GameObject prefabParent, Text textComponent)
         {
-            // Skips execition if there were no text components found in the hierarchy
-            if (!prefab.TryGetComponentsInChildren(out List<Text> localTextComponents, skipNestedPrefabs: true))
+            var updatedReferences = CheckTextAgainstFoundMonobehaviours(textComponent, prefabParent);
+
+            foreach (UpdatedReference updatedReference in updatedReferences)
             {
-                return null;
+                UpdatedReferenceAddressBook[sourcePrefabPath].Add(updatedReference);
             }
-            else
-            {
-                currentDepth++;
-            }
-
-            bool logthisone = true;
-
-            List<TextRefernce> textRefernces = new List<TextRefernce>(localTextComponents.Count);
-
-            foreach (Text text in localTextComponents)
-            {
-                // bool isReferenced = false;
-                string prefabPath = AssetDatabase.GetAssetPath(prefab);
-
-                    if (prefab.name.Contains("PrefabbedText"))
-                    {
-                        Debug.Log(prefab);
-                    };
-
-                // * Always add 
-                UpdatedReference unreferencedTextComponent = new UpdatedReference(prefab, text);
-                UpdatedReferenceAddressBook[prefabPath].Add(unreferencedTextComponent);
-
-                TextRefernce textRef = new TextRefernce(prefabPath, text);
-                textRefernces.Add(textRef);
-                _replaceCounter.updatedTextComponentCount++;
-
-                //! 1. Internal text component references
-                //* Considering simplest case when text component is only referenced within a single prefabvb
-
-                foreach (MonoBehaviour mono in _customMonobehavioursByPrefab[prefab])
-                {
-                    if (mono.IsReferencingComponent(anotherComponent: text, out string fieldName))
-                    {
-                        UpdatedReference updatedAsstReference = new UpdatedReference(prefab, text, mono, fieldName);
-                        UpdatedReferenceAddressBook[prefabPath].Add(updatedAsstReference);
-                        // isReferenced = true;
-                    }
-                }
-
-                // TODO remove this thing, it only does the counitng now
-                if (prefab.TryExtractTextReferences(text, _customMonobehavioursByPrefab[prefab], out List<MonoBehaviour> textReferences))
-                {
-                    textRef.SetLocalTextReferences(textReferences);
-                    logthisone = UpdateCountLogger(logthisone, textReferences);
-
-                    _replaceCounter.updatedTextComponentReferencesCount += textReferences.Count;
-                }
-
-                //todo 2. Text components referenced by nested prefabs
-                //todo 3. Text components of prefabs that are reference by the other nested prefabs
-                //todo X???. Text components of prefabs that are referenced by parent of a parent OR by a nested prefab of a parent of a parent OOF
-
-                //! 4. Foreign text component references
-                // Get all instances of a Text component along with the parentPrefab that is holding them
-                // It is a list of Text components because parentPrefab may hold multiple references to that Text Component
-                foreach (var kvp in GetAllTextInstances(prefab, text))
-                {
-                    // * Clean this up, extract the recurring method
-                    GameObject parentPrefab = kvp.Key;
-                    List<Text> textComponentInstances = kvp.Value;
-
-                    string otherPrefabPath = AssetDatabase.GetAssetPath(parentPrefab);
-
-                    foreach (Text textInstance in textComponentInstances)
-                    {
-                        foreach (MonoBehaviour mono in _customMonobehavioursByPrefab[parentPrefab])
-                        {
-                            if (mono.IsReferencingComponent(anotherComponent: textInstance, out string fieldName))
-                            {
-                                //! should be original prefab instead
-                                UpdatedReference updatedAsstReference = new UpdatedReference(parentPrefab, textInstance, mono, fieldName);
-                                UpdatedReferenceAddressBook[prefabPath].Add(updatedAsstReference);
-                                // isReferenced = true;
-                            }
-                        }
-
-                        // TODO Remove all below
-                        bool foundMonobehaviourReferences = parentPrefab
-                            .TryExtractTextReferences(
-                                text: textInstance,
-                                monoBehaviourToCheck: _customMonobehavioursByPrefab[parentPrefab],
-                                textReferences: out List<MonoBehaviour> textInstanceReferences);
-
-                        if (foundMonobehaviourReferences)
-                        {
-                            textRef.AddForeignTextReference(textInstance, textInstanceReferences);
-                            _replaceCounter.updatedTextComponentReferencesCount += textInstanceReferences.Count;
-                        }
-                        else
-                        {
-                            // TODO  Just add a reference to a found text instance that we didn't find other scipts referencing it
-                            textRef.AddUnreferencedTextInstance(textInstance);
-                        }
-
-                        logthisone = UpdateCountLogger(logthisone, textInstanceReferences);
-
-                        _replaceCounter.updatedTextComponentCount++;
-                    }
-                }
-            }
-
-            if (logthisone) PrintPrefabAnalysis(prefab, textRefernces, msb, localTextComponents);
-
-            return textRefernces;
         }
 
+        private List<UpdatedReference> CheckTextAgainstFoundMonobehaviours(Text textComponent, GameObject parentPrefab)
+        {
+            List<UpdatedReference> updatedReferences = new List<UpdatedReference>(_customMonobehavioursByPrefab[parentPrefab].Count);
+
+            foreach (MonoBehaviour mono in _customMonobehavioursByPrefab[parentPrefab])
+            {
+                if (mono.IsReferencingComponent(anotherComponent: textComponent, out string fieldName))
+                {
+                    //! should be original prefab instead
+                    updatedReferences.Add(new UpdatedReference(parentPrefab, textComponent, mono, fieldName));
+                    _replaceCounter.updatedTextComponentReferencesCount++;
+                }
+            }
+
+            return updatedReferences;
+        }
+
+        // TODO Update this if needed
+        [Obsolete]
         private bool UpdateCountLogger(bool logthisone, List<MonoBehaviour> textReferences)
         {
             // * Below is just for counter purposes
@@ -688,7 +654,7 @@ namespace FabulousReplacer
             return logthisone;
         }
 
-        private void PrintPrefabAnalysis(GameObject prefab, List<TextRefernce> textRefs, MultilineStringBuilder msb, List<Text> localTextComponents)
+        private void PrintPrefabAnalysis(GameObject prefab, MultilineStringBuilder msb, List<Text> localTextComponents)
         {
             msb.AddLine($"Analysis of {prefab.name}");
             if (_nestedPrefabs.ContainsKey(prefab) && _nestedPrefabs[prefab].Count > 0)
@@ -724,32 +690,32 @@ namespace FabulousReplacer
                 }
             }
 
-            foreach (var textRef in textRefs)
-            {
-                msb.AddLine($"Text at: {textRef.originalPrefabText.gameObject.name}:");
+            // foreach (var textRef in textRefs)
+            // {
+            //     msb.AddLine($"Text at: {textRef.originalPrefabText.gameObject.name}:");
 
-                if (textRef.localTextReferences != null && textRef.localTextReferences.Count > 0)
-                {
-                    msb.AddLine($"---> Has internal references:");
-                    foreach (var fukkkk in textRef.localTextReferences)
-                    {
-                        msb.AddLine($"------> {fukkkk}");
-                    }
-                }
+            //     if (textRef.localTextReferences != null && textRef.localTextReferences.Count > 0)
+            //     {
+            //         msb.AddLine($"---> Has internal references:");
+            //         foreach (var fukkkk in textRef.localTextReferences)
+            //         {
+            //             msb.AddLine($"------> {fukkkk}");
+            //         }
+            //     }
 
-                if (textRef.foreignTextReferencesDictionary != null && textRef.foreignTextReferencesDictionary.Count > 0)
-                {
-                    msb.AddLine($"(!!!) Has foreign text references:");
-                    foreach (var kvp in textRef.foreignTextReferencesDictionary)
-                    {
-                        msb.AddLine($"---> Foreign reference to an instance of: {kvp.Key} ");
-                        foreach (var fukkkk in kvp.Value)
-                        {
-                            msb.AddLine($"------> {fukkkk} component.");
-                        }
-                    }
-                }
-            }
+            //     if (textRef.foreignTextReferencesDictionary != null && textRef.foreignTextReferencesDictionary.Count > 0)
+            //     {
+            //         msb.AddLine($"(!!!) Has foreign text references:");
+            //         foreach (var kvp in textRef.foreignTextReferencesDictionary)
+            //         {
+            //             msb.AddLine($"---> Foreign reference to an instance of: {kvp.Key} ");
+            //             foreach (var fukkkk in kvp.Value)
+            //             {
+            //                 msb.AddLine($"------> {fukkkk} component.");
+            //             }
+            //         }
+            //     }
+            // }
 
             msb.AddSeparator();
         }

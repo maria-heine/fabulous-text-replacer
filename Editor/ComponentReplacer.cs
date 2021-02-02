@@ -17,7 +17,6 @@ namespace FabulousReplacer
 {
     public class ComponentReplacer
     {
-        List<TextRefernce> _textReferences;
         UpdatedReferenceAddressBook _updatedReferenceAddressBook;
         Dictionary<Type, List<string>> _updatedMonoFields;
 
@@ -36,13 +35,7 @@ namespace FabulousReplacer
             fontAsset = AssetDatabase.LoadAssetAtPath("Assets/TextMesh Pro/Resources/Fonts & Materials/LiberationSans SDF.asset", typeof(TMP_FontAsset)) as TMP_FontAsset;
         }
 
-        public void SetReplacerTextReferences(List<TextRefernce> textReferences)
-        {
-            _textReferences = textReferences;
-        }
-
         // TODO What about private Text fields?
-
         // ! I am still missing the case of text components that dont have references at all
         private void RunReplaceLogic()
         {
@@ -234,6 +227,7 @@ namespace FabulousReplacer
             newText.font = fontAsset;
             newText.fontSize = (float)textInfo.FontSize;
             newText.color = textInfo.FontColor;
+            newText.enableWordWrapping = true;
             AssetDatabase.StopAssetEditing();
             AssetDatabase.SaveAssets();
         }

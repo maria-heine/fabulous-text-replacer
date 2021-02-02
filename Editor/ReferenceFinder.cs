@@ -150,15 +150,12 @@ namespace FabulousReplacer
 
             return foundTFields.Count > 0;
         }
-
+        
         //TODO remove this one
+        [Obsolete]
         public static bool TryExtractTextReferences(this GameObject prefab, Text text, IEnumerable<MonoBehaviour> monoBehaviourToCheck, out List<MonoBehaviour> textReferences)
         {
             textReferences = new List<MonoBehaviour>();
-
-
-            
-
             foreach (MonoBehaviour mono in monoBehaviourToCheck)
             {
                 if (mono.IsReferencingComponent(text, out string fieldName))
@@ -192,6 +189,7 @@ namespace FabulousReplacer
             return false;
         }
 
+        //TODO Replace with Iterate above
         private static bool IsFieldReferencingComponent<T>(T instance, FieldInfo field, T component) where T : Component
         {
             _ = component != null ? component : throw new ArgumentNullException(nameof(component));

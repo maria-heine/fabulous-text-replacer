@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEditor;
+using System;
 
 namespace FabulousReplacer
 {
-
+    //TODO remove entirely
+    [Obsolete]
     public class TextRefernce
     {
         public string prefabPath { get; private set;}
