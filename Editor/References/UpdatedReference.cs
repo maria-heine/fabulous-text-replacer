@@ -101,8 +101,8 @@ namespace FabulousReplacer
         public UpdatedReference(GameObject rootPrefab, Text unreferencedText)
         {
             rootPrefabName = rootPrefab.gameObject.name;
-            textInformation = new TextInformation(unreferencedText);
             prefabPath = AssetDatabase.GetAssetPath(rootPrefab);
+            textInformation = new TextInformation(unreferencedText);
             this.rootPrefab = rootPrefab;
             this.originalText = unreferencedText;
             TextAddress = GetComponentAddressInHierarchy(rootPrefab, unreferencedText);
@@ -116,11 +116,12 @@ namespace FabulousReplacer
             textInformation = new TextInformation(referencedText);
             this.rootPrefab = referencingPrefab;
             this.originalText = referencedText;
+            TextAddress = GetComponentAddressInHierarchy(referencingPrefab, referencedText);
+            isReferenced = true;
+            
             this.MonoType = referencingMono.GetType();
             this.fieldName = fieldName;
             MonoAddress = GetComponentAddressInHierarchy(referencingPrefab, referencingMono);
-            TextAddress = GetComponentAddressInHierarchy(referencingPrefab, referencedText);
-            isReferenced = true;
         }
     }
 }
