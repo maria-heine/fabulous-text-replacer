@@ -19,6 +19,7 @@ namespace FabulousReplacer
     {
         UpdatedReferenceAddressBook _updatedReferenceAddressBook;
         Dictionary<Type, List<string>> _updatedMonoFields;
+        Dictionary<string, Component> _reloadedComponents;
 
         Dictionary<Type, MonoUpdateDetails> _monoUpdateDetails;
 
@@ -33,6 +34,7 @@ namespace FabulousReplacer
         {
             _updatedReferenceAddressBook = updatedReferenceAddressBook;
             _updatedMonoFields = new Dictionary<Type, List<string>>();
+            _reloadedComponents = new Dictionary<string, Component>();
 
             updateComponentsButton.clicked += () =>
             {
@@ -48,25 +50,18 @@ namespace FabulousReplacer
         // ! I am still missing the case of text components that dont have references at all
         private void RunReplaceLogic()
         {
+            List<string> toReserailize = new List<string>();
+
             foreach (var kvp in _updatedReferenceAddressBook)
             {
                 string prefabPath = kvp.Key;
 
                 foreach (UpdatedReference reference in kvp.Value)
                 {
-                    // // * Step: Update script
-                    // // TODO Alternate behaviour when the script was already modified for that field name
-                    // if (reference.isReferenced)
-                    // {
-                    //     UpdateScript(reference.MonoType, reference.fieldName);
-                    // }
-
                     GatherMono(reference);
 
                     // * Step: Replace component
                     ReplaceTextComponent(reference);
-
-                    AssetDatabase.SaveAssets();
                 }
             }
 
@@ -301,6 +296,15 @@ namespace FabulousReplacer
             // * If you want to edit a prefab, make sure you just loaded it and you work on a fresh, crunchy instance
             Component prefab = AssetDatabase.LoadAssetAtPath(updatedReference.prefabPath, typeof(Component)) as Component;
 
+            // if (_reloadedComponents.ContainsKey(updatedReference.prefabPath))
+            // {
+            //     prefab = _reloadedComponents[updatedReference.prefabPath];
+            // }
+            // else
+            // {
+            //     prefab = AssetDatabase.LoadAssetAtPath(updatedReference.prefabPath, typeof(Component)) as Component;
+            // }
+
             Text oldText = FabulousExtensions
                 .GetGameObjectAtAddress(prefab.gameObject, updatedReference.TextAddress)
                 .GetComponent<Text>();
@@ -328,10 +332,15 @@ namespace FabulousReplacer
             newText.fontSize = (float)textInfo.FontSize;
             newText.color = textInfo.FontColor;
             newText.enableWordWrapping = true;
-            AssetDatabase.SaveAssets();
-            //* You may think the line below is not important but I've lost 4hours of work debugging why nested prefabs don't save their changes
-            AssetDatabase.ForceReserializeAssets(new string[] { updatedReference.prefabPath }, ForceReserializeAssetsOptions.ReserializeAssetsAndMetadata);
-            AssetDatabase.ImportAsset(updatedReference.prefabPath);
+
+            PrefabUtility.RecordPrefabInstancePropertyModifications(newText);
+            PrefabUtility.SavePrefabAsset(prefab.gameObject);
+            // AssetDatabase.SaveAssets();
+
+            // AssetDatabase.SaveAssets();
+            // //* You may think the line below is not important but I've lost 4hours of work debugging why nested prefabs don't save their changes
+            // AssetDatabase.ForceReserializeAssets(new string[] { updatedReference.prefabPath }, ForceReserializeAssetsOptions.ReserializeAssetsAndMetadata);
+            // AssetDatabase.ImportAsset(updatedReference.prefabPath);
         }
 
         #endregion // TEXT COMPONENT REPLACEMENT
