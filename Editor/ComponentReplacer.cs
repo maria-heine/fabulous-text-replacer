@@ -19,6 +19,14 @@ namespace FabulousReplacer
     {
         UpdatedReferenceAddressBook _updatedReferenceAddressBook;
         Dictionary<Type, List<string>> _updatedMonoFields;
+        Dictionary<string, Component> _reloadedComponents;
+
+        Dictionary<Type, MonoUpdateDetails> _monoUpdateDetails;
+
+        private class MonoUpdateDetails
+        {
+            public List<string> fieldNames;
+        }
 
         TMP_FontAsset fontAsset;
 
@@ -26,6 +34,7 @@ namespace FabulousReplacer
         {
             _updatedReferenceAddressBook = updatedReferenceAddressBook;
             _updatedMonoFields = new Dictionary<Type, List<string>>();
+            _reloadedComponents = new Dictionary<string, Component>();
 
             updateComponentsButton.clicked += () =>
             {
@@ -34,39 +43,48 @@ namespace FabulousReplacer
 
             //TODO REWORK
             fontAsset = AssetDatabase
-                .LoadAssetAtPath("Assets/TextMesh Pro/Resources/Fonts & Materials/LiberationSans SDF.asset", typeof(TMP_FontAsset)) as TMP_FontAsset;
+                .LoadAssetAtPath("Packages/com.mariaheineboombyte.fabulous-text-replacer/TextMeshProFonts/Oswald/Oswald-Regular SDF.asset", typeof(TMP_FontAsset)) as TMP_FontAsset;
         }
 
         // TODO What about private Text fields?
         // ! I am still missing the case of text components that dont have references at all
         private void RunReplaceLogic()
         {
+            List<string> toReserailize = new List<string>();
+
             foreach (var kvp in _updatedReferenceAddressBook)
             {
                 string prefabPath = kvp.Key;
 
                 foreach (UpdatedReference reference in kvp.Value)
                 {
-                    // * Step: Update script
-                    // TODO Alternate behaviour when the script was already modified for that field name
-                    if (reference.isReferenced)
-                    {
-                        UpdateScript(reference.MonoType, reference.fieldName);
-                    }
+                    GatherMono(reference);
 
                     // * Step: Replace component
                     ReplaceTextComponent(reference);
-
-                    AssetDatabase.SaveAssets();
                 }
             }
 
-            CompilationPipeline.compilationFinished += stuff =>
+            try
             {
+                AssetDatabase.StartAssetEditing();
+                MassReplaceFields();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError(ex.Message + ex.StackTrace);
+            }
+            finally
+            {
+                AssetDatabase.StopAssetEditing();
+            }
 
-            };
+            // CompilationPipeline.compilationFinished += stuff =>
+            // {
 
-            CompilationPipeline.RequestScriptCompilation();
+            // };
+
+            // CompilationPipeline.RequestScriptCompilation();
         }
 
         //
@@ -75,71 +93,136 @@ namespace FabulousReplacer
 
         #region SCRIPT REPLACEMENT 
 
-        private void UpdateScript(Type monoType, string fieldName)
+        private void GatherMono(UpdatedReference reference)
         {
-            if (_updatedMonoFields.ContainsKey(monoType) && _updatedMonoFields[monoType].Contains(fieldName))
+            if (reference.isReferenced)
             {
-                return;
-            }
-            else
-            {
-                if (!_updatedMonoFields.ContainsKey(monoType))
+                Type monoType = reference.MonoType;
+                string fieldName = reference.fieldName;
+
+                if (_updatedMonoFields.ContainsKey(monoType) && _updatedMonoFields[monoType].Contains(fieldName))
+                {
+                    return;
+                }
+                else if (!_updatedMonoFields.ContainsKey(monoType))
                 {
                     _updatedMonoFields[monoType] = new List<string>();
                 }
+
                 _updatedMonoFields[monoType].Add(fieldName);
             }
-
-            //* This is easy in case of MonoBehaviours since their filename must match the calssname
-            string scriptFileName = monoType.Name;
-            string[] assets = AssetDatabase.FindAssets($"{scriptFileName}");
-            var path = AssetDatabase.GUIDToAssetPath(assets[0]);
-
-            if (assets.Length != 1)
-            {
-                Debug.LogError("Well, really we shouldn't find less or more than exactly one asset like that");
-            }
-            else if (AssetDatabase.GetMainAssetTypeAtPath(path) != typeof(UnityEditor.MonoScript))
-            {
-                Debug.LogError($"What on earth did you find? path: {path}");
-            }
-
-            List<string> lines = GetUpdatedScriptLines(path, fieldName);
-            SaveUpdateScript(path, lines);
-
-            fieldName = $"{fieldName}TMPro";
         }
 
-        private static List<string> GetUpdatedScriptLines(string path, string fieldName)
+        private void MassReplaceFields()
         {
-            List<string> lines = new List<string>();
+            foreach (var item in _updatedMonoFields)
+            {
+                Type monoType = item.Key;
+                List<string> fieldNames = item.Value;
+
+                string scriptFileName = monoType.Name;
+                string[] assets = AssetDatabase.FindAssets($"{scriptFileName}");
+                var path = AssetDatabase.GUIDToAssetPath(assets[0]);
+
+                if (assets.Length != 1)
+                {
+                    Debug.LogError("Well, really we shouldn't find less or more than exactly one asset like that");
+                }
+                else if (AssetDatabase.GetMainAssetTypeAtPath(path) != typeof(UnityEditor.MonoScript))
+                {
+                    Debug.LogError($"What on earth did you find? path: {path}");
+                }
+
+                List<string> scriptLines = GetUpdatedScriptLines(path, fieldNames);
+
+                Debug.Log($"{scriptLines}");
+
+                SaveUpdateScript(path, scriptLines);
+            }
+        }
+
+        private static List<string> GetUpdatedScriptLines(string scriptPath, List<string> fieldNames)
+        {
+            List<string> finalScriptLines = new List<string>();
 
             try
             {
-                using (var reader = new StreamReader(path))
+                bool foundTmProUsings = false;
+                bool foundClassOpening = false;
+                bool foundClassDeclaration = false;
+                bool insertedReplacerCode = false;
+
+                using (var reader = new StreamReader(scriptPath))
                 {
                     string line;
-                    string textFieldPattern = $@"\s+Text\s+{fieldName}";
+                    string classPattern = @"class\s\w+\s+:\s+MonoBehaviour";
+                    string classOpenPattern = @"\{";
                     string indentationPattern = @"^\s+";
+                    string tmProUsingsPattern = @"using\s+TMPro;";
 
-                    Regex textFieldRx = new Regex(textFieldPattern);
+                    //TODO omg what if there is a List of Text components somewhere in zula?
+                    string fieldSearchPattern = @"(";
+                    for (int i = 0; i < fieldNames.Count; i++)
+                    {
+                        fieldSearchPattern += $@"\sText\s+{fieldNames[i]};";
+                        if (i < fieldNames.Count - 1) fieldSearchPattern += "|";
+                    }
+                    fieldSearchPattern += ")";
+
+                    Debug.Log($"{fieldSearchPattern}");
+
+                    Regex classRx = new Regex(classPattern);
+                    Regex classOpenRx = new Regex(classOpenPattern);
                     Regex indentRx = new Regex(indentationPattern);
-
-                    // TODO hopefully in zula there are no places mixing tmpro and text yet
-                    // ? otherwise no big deal, just add pre-check for existing TMPro using
-                    lines.Add("using TMPro;");
+                    Regex tmProUsingsRx = new Regex(tmProUsingsPattern);
+                    Regex fieldSearchRx = new Regex(fieldSearchPattern);
 
                     while ((line = reader.ReadLine()) != null)
                     {
-                        if (textFieldRx.IsMatch(line))
+                        if (tmProUsingsRx.IsMatch(line))
+                        {
+                            foundTmProUsings = true;
+                        }
+                        else if (classRx.IsMatch(line))
+                        {
+                            foundClassDeclaration = true;
+                        }
+                        else if (foundClassDeclaration && classOpenRx.IsMatch(line))
+                        {
+                            foundClassOpening = true;
+                        }
+                        else if (!insertedReplacerCode && foundClassDeclaration && foundClassOpening)
                         {
                             Match indentation = indentRx.Match(line);
-                            lines.AddRange(GetAdapterTemplate(fieldName, indentation.Value));
+
+                            finalScriptLines.Add("#region Autogenerated UnityEngine.Text replacer code");
+                            finalScriptLines.Add($"{indentation.Value}/* please don't edit */");
+                            foreach (var fieldName in fieldNames)
+                            {
+                                IEnumerable<string> lines = GetAdapterTemplate(fieldName, indentation.Value);
+                                finalScriptLines.AddRange(lines);
+                            }
+                            finalScriptLines.Add($"{indentation.Value}/* fin */");
+                            finalScriptLines.Add("#endregion // Autogenerated UnityEngine.Text replacer code ");
+                            finalScriptLines.Add(indentation.Value);
+
+                            insertedReplacerCode = true;
+                        }
+                        
+                        if (fieldSearchRx.IsMatch(line))
+                        {
+                            // We just want to skip the original field declaration line
+                            continue;
                         }
                         else
                         {
-                            lines.Add(line);
+                            finalScriptLines.Add(line);
                         }
+                    }
+
+                    if (foundTmProUsings == false)
+                    {
+                        finalScriptLines.Insert(0, "using TMPro;");
                     }
                 }
             }
@@ -149,7 +232,7 @@ namespace FabulousReplacer
                 Debug.LogError(e.Message);
             }
 
-            return lines;
+            return finalScriptLines;
         }
 
         private static void SaveUpdateScript(string path, List<string> lines)
@@ -174,7 +257,7 @@ namespace FabulousReplacer
 
         private static List<string> GetAdapterTemplate(string fileName, string indentation)
         {
-            FileStream stream = new FileStream("Packages/com.mariaheineboombyte.fabulous-text-replacer/Editor/Templates/AdapterTemplate.txt", FileMode.Open);
+            FileStream stream = new FileStream("Packages/com.mariaheineboombyte.fabulous-text-replacer/Editor/Templates/ShortAdapterTemplate.txt", FileMode.Open);
 
             string line;
             List<string> templateLines = new List<string>();
@@ -206,12 +289,21 @@ namespace FabulousReplacer
         {
             TextMeshProUGUI newText;
             TextInformation textInfo = updatedReference.textInformation;
-            
+
             // * Don't even think of performing below operations on previously saved prefabs loaded into the memory
             // * They are like lost souls that want to trap your innocent code
             // * Whatever you execute on them gets lost in a limbo and flushed down along the garbage collection
             // * If you want to edit a prefab, make sure you just loaded it and you work on a fresh, crunchy instance
             Component prefab = AssetDatabase.LoadAssetAtPath(updatedReference.prefabPath, typeof(Component)) as Component;
+
+            // if (_reloadedComponents.ContainsKey(updatedReference.prefabPath))
+            // {
+            //     prefab = _reloadedComponents[updatedReference.prefabPath];
+            // }
+            // else
+            // {
+            //     prefab = AssetDatabase.LoadAssetAtPath(updatedReference.prefabPath, typeof(Component)) as Component;
+            // }
 
             Text oldText = FabulousExtensions
                 .GetGameObjectAtAddress(prefab.gameObject, updatedReference.TextAddress)
@@ -240,10 +332,15 @@ namespace FabulousReplacer
             newText.fontSize = (float)textInfo.FontSize;
             newText.color = textInfo.FontColor;
             newText.enableWordWrapping = true;
-            AssetDatabase.SaveAssets();
-            //* You may think the line below is not important but I've lost 4hours of work debugging why nested prefabs don't save their changes
-            AssetDatabase.ForceReserializeAssets(new string[] { updatedReference.prefabPath }, ForceReserializeAssetsOptions.ReserializeAssetsAndMetadata);
-            AssetDatabase.ImportAsset(updatedReference.prefabPath);
+
+            PrefabUtility.RecordPrefabInstancePropertyModifications(newText);
+            PrefabUtility.SavePrefabAsset(prefab.gameObject);
+            // AssetDatabase.SaveAssets();
+
+            // AssetDatabase.SaveAssets();
+            // //* You may think the line below is not important but I've lost 4hours of work debugging why nested prefabs don't save their changes
+            // AssetDatabase.ForceReserializeAssets(new string[] { updatedReference.prefabPath }, ForceReserializeAssetsOptions.ReserializeAssetsAndMetadata);
+            // AssetDatabase.ImportAsset(updatedReference.prefabPath);
         }
 
         #endregion // TEXT COMPONENT REPLACEMENT
