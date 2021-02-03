@@ -114,7 +114,6 @@ namespace FabulousReplacer
 
                     foreach (object obj in arr)
                     {
-                        Debug.Log($"Found an array for {mono}, field {field.Name}");
                         if (obj.GetType() == typeof(T))
                         {
                             foundTFields.Add(field);

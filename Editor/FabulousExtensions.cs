@@ -252,6 +252,7 @@ namespace FabulousReplacer
             }
         }
 
+        //TODO This would have to be substituted with a list of excluded namespaces
         public static bool TryGetScripts(this GameObject go, List<MonoBehaviour> foundScripts)
         {
             bool foundSometing = false;
@@ -261,19 +262,29 @@ namespace FabulousReplacer
                 // Just to be sure, we don't want to grab original unity components
                 if (mono != null)
                 {
-                    string monoNamespce = mono.GetType().Namespace;
-
-                    if ((monoNamespce != null
-                        && monoNamespce.Contains("UnityEngine")) == false
-                        && monoNamespce.Contains("TMPro") == false)
+                    try
                     {
-                        foundScripts.Add(mono);
-                        foundSometing = true;
+                        string monoNamespce = mono.GetType().Namespace;
+
+                        if (monoNamespce != null)
+                        {
+                            if (monoNamespce.Contains("UnityEngine") == false
+                            && monoNamespce.Contains("TMPro") == false)
+                            {
+                                foundScripts.Add(mono);
+                                foundSometing = true;
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogError($"Error at trying to get scripts in {go.transform.root.name} gameobject:");
+                        Debug.LogError(ex.Message + ex.StackTrace);
                     }
                 }
                 else
                 {
-                    Debug.LogError($"Mysterious null mono found: {mono}");
+                    Debug.LogError($"Mysterious null mono found at {go.transform.root.name} object");
                 }
             });
 

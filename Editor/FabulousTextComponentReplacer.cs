@@ -135,10 +135,14 @@ namespace FabulousReplacer
                     // Since only prefabs in assets will have a component as it's root
                     if (topAsset is Component c)
                     {
-                        _loadedPrefabs.Add(c.gameObject);
-
-                        // ! Counting all found text components
-                        _replaceCounter.totalTextComponentCount += c.gameObject.GetComponentsInChildren<Text>(includeInactive: true).Count();
+                        bool hasMonobehaviour = c.GetComponentInChildren<MonoBehaviour>(includeInactive: true) != null;
+                        bool hasRectTransform = c.GetComponentInChildren<RectTransform>(includeInactive: true) != null;
+                        if (hasRectTransform)
+                        {
+                            _loadedPrefabs.Add(c.gameObject);
+                            // ! Counting all found text components
+                            _replaceCounter.totalTextComponentCount += c.gameObject.GetComponentsInChildren<Text>(includeInactive: true).Count();
+                        }
                     }
                 }
                 catch (Exception)
@@ -170,9 +174,11 @@ namespace FabulousReplacer
                     {
                         var overrides = PrefabUtility.GetObjectOverrides(nestedPrefab);
 
+                        //TODO This has to be done with msb logger instead
+                        //TODO Note there are obviously many overrides so this may cause problewms 
                         if (overrides.Count > 0)
                         {
-                            Debug.Log($"{rootPrefab} has overrides at {nestedPrefab}");
+                            //Debug.Log($"{rootPrefab} has overrides at {nestedPrefab}");
                         }
 
                         //! This has to be done since nested prefabs are separate instances

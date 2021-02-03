@@ -29,7 +29,7 @@ namespace FabulousReplacer
         {
             get
             {
-                FakeDictionary entry = fakePrefabsUpdatedReferences.Find(entry => entry.prefabPath == prefabPath);
+                FakeDictionary entry = fakePrefabsUpdatedReferences.Find(item => item.prefabPath == prefabPath);
 
                 if (entry == null)
                 {
