@@ -20,6 +20,9 @@ public class TextToTextMeshProAdapter : Text
         _textMesh = textMesh;
     }
 
+    public new GameObject gameObject => _textMesh.gameObject;
+    public new Transform transform => _textMesh.transform;
+
     // public void SetTextMeshProAdapterReference(TextMeshProUGUI textMesh)
     // {
     //     _textMesh = textMesh;

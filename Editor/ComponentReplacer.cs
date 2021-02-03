@@ -133,7 +133,7 @@ namespace FabulousReplacer
                     Debug.LogError($"What on earth did you find? path: {path}");
                 }
 
-                List<string> scriptLines = GetUpdatedScriptLines(path, fieldNames);
+                List<string> scriptLines = GetUpdatedScriptLines(path, monoType, fieldNames);
 
                 Debug.Log($"{scriptLines}");
 
@@ -141,7 +141,7 @@ namespace FabulousReplacer
             }
         }
 
-        private static List<string> GetUpdatedScriptLines(string scriptPath, List<string> fieldNames)
+        private static List<string> GetUpdatedScriptLines(string scriptPath, Type monoType, List<string> fieldNames)
         {
             List<string> finalScriptLines = new List<string>();
 
@@ -155,7 +155,7 @@ namespace FabulousReplacer
                 using (var reader = new StreamReader(scriptPath))
                 {
                     string line;
-                    string classPattern = @"class\s\w+\s+:\s+MonoBehaviour";
+                    string classPattern = $@"\bclass\s+{monoType.Name}\b";
                     string classOpenPattern = @"\{";
                     string indentationPattern = @"^\s+";
                     string tmProUsingsPattern = @"using\s+TMPro;";
@@ -168,8 +168,6 @@ namespace FabulousReplacer
                         if (i < fieldNames.Count - 1) fieldSearchPattern += "|";
                     }
                     fieldSearchPattern += ")";
-
-                    Debug.Log($"{fieldSearchPattern}");
 
                     Regex classRx = new Regex(classPattern);
                     Regex classOpenRx = new Regex(classOpenPattern);
