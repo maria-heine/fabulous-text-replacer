@@ -79,6 +79,8 @@ namespace FabulousReplacer
                 AssetDatabase.StopAssetEditing();
             }
 
+            CompilationPipeline.RequestScriptCompilation();
+
             // CompilationPipeline.compilationFinished += stuff =>
             // {
 
