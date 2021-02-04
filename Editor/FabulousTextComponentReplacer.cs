@@ -35,7 +35,10 @@ namespace FabulousReplacer
         ComponentReplacer _componentReplacer;
         ReferenceUpdater _referenceUpdater;
         UpdatedReferenceAddressBook _updatedReferenceAddressBook;
+
         Box _boxDisplayer;
+        IntegerField _lowRange;
+        IntegerField _highRange;
 
         Action UpgradeProgressBar;
 
@@ -141,13 +144,13 @@ namespace FabulousReplacer
             { text = "Analyse prefabs" };
             container.Add(analysePrefabsButton);
 
-            IntegerField lowRange = new IntegerField("Replacement low range");
-            lowRange.value = 0;
-            container.Add(lowRange);
+            _lowRange = new IntegerField("Replacement low range");
+            _lowRange.value = 0;
+            container.Add(_lowRange);
 
-            IntegerField highRange = new IntegerField("Replacement high range");
-            highRange.value = 20;
-            container.Add(highRange);
+            _highRange = new IntegerField("Replacement high range");
+            _highRange.value = 20;
+            container.Add(_highRange);
 
             var updateComponentsButton = new Button()
             { text = "Update components" };
@@ -155,8 +158,8 @@ namespace FabulousReplacer
                 new ComponentReplacer(
                     UpdatedReferenceAddressBook, 
                     updateComponentsButton,
-                    lowRange,
-                    highRange);
+                    _lowRange,
+                    _highRange);
             container.Add(updateComponentsButton);
 
             var referenceUpdateButton = new Button()
@@ -165,8 +168,8 @@ namespace FabulousReplacer
                 new ReferenceUpdater(
                     UpdatedReferenceAddressBook, 
                     referenceUpdateButton,
-                    lowRange,
-                    highRange);
+                    _lowRange,
+                    _highRange);
             container.Add(referenceUpdateButton);
 
             analysePrefabsButton.clicked += () =>
@@ -397,6 +400,22 @@ namespace FabulousReplacer
             IntegerField loggingDepthField = new IntegerField("Logging Depth");
             loggingDepthField.value = 30;
             box.Add(loggingDepthField);
+
+            var logRange = new Button(() =>
+            {
+                var msb = new MultilineStringBuilder("Log prefabs in update range");
+
+                msb.AddLine($"Total length of address book is {UpdatedReferenceAddressBook.Paths.Length}");
+
+                for(int i = _lowRange.value; i < _highRange.value; i++)
+                {
+                    msb.AddLine(UpdatedReferenceAddressBook.Paths[i]);
+                }
+
+                DisplayInBox(GetTextElement(msb.ToString()));
+            })
+            { text = "Log prefabs in update range" };
+            box.Add(logRange);
 
             var logOverridesButton = new Button(() =>
             {
