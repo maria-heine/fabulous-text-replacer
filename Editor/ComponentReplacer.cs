@@ -12,6 +12,7 @@ using System.IO;
 using System.Text.RegularExpressions;
 using System.Text;
 using UnityEngine.UI;
+using UnityEditor.UIElements;
 
 namespace FabulousReplacer
 {
@@ -19,22 +20,17 @@ namespace FabulousReplacer
     {
         UpdatedReferenceAddressBook _updatedReferenceAddressBook;
         Dictionary<Type, List<string>> _updatedMonoFields;
-        Dictionary<string, Component> _reloadedComponents;
-
-        Dictionary<Type, MonoUpdateDetails> _monoUpdateDetails;
-
-        private class MonoUpdateDetails
-        {
-            public List<string> fieldNames;
-        }
+        IntegerField lowRange;
+        IntegerField highRange;
 
         TMP_FontAsset fontAsset;
 
-        public ComponentReplacer(UpdatedReferenceAddressBook updatedReferenceAddressBook, Button updateComponentsButton)
+        public ComponentReplacer(UpdatedReferenceAddressBook updatedReferenceAddressBook, Button updateComponentsButton, IntegerField lowRange, IntegerField highRange)
         {
             _updatedReferenceAddressBook = updatedReferenceAddressBook;
             _updatedMonoFields = new Dictionary<Type, List<string>>();
-            _reloadedComponents = new Dictionary<string, Component>();
+            this.lowRange = lowRange;
+            this.highRange = highRange;
 
             updateComponentsButton.clicked += () =>
             {
@@ -43,20 +39,21 @@ namespace FabulousReplacer
 
             //TODO REWORK
             fontAsset = AssetDatabase
-                .LoadAssetAtPath("Packages/com.mariaheineboombyte.fabulous-text-replacer/TextMeshProFonts/Oswald/Oswald-Regular SDF.asset", typeof(TMP_FontAsset)) as TMP_FontAsset;
+                .LoadAssetAtPath("Packages/com.mariaheineboombyte.fabulous-text-replacer/TextMeshProFonts/Oswald/Oswald-SemiBold SDF.asset", typeof(TMP_FontAsset)) as TMP_FontAsset;
         }
 
         // TODO What about private Text fields?
         // ! I am still missing the case of text components that dont have references at all
         private void RunReplaceLogic()
         {
-            List<string> toReserailize = new List<string>();
+            int from = lowRange.value >= _updatedReferenceAddressBook.Count ? _updatedReferenceAddressBook.Count : lowRange.value;
+            int to = highRange.value >= _updatedReferenceAddressBook.Count ? _updatedReferenceAddressBook.Count : highRange.value;
 
-            foreach (var kvp in _updatedReferenceAddressBook)
+            for (int i = from; i < to; i++)
             {
-                string prefabPath = kvp.Key;
+                var references = _updatedReferenceAddressBook[i];
 
-                foreach (UpdatedReference reference in kvp.Value)
+                foreach (UpdatedReference reference in references)
                 {
                     GatherMono(reference);
 
@@ -64,6 +61,19 @@ namespace FabulousReplacer
                     ReplaceTextComponent(reference);
                 }
             }
+
+            //foreach (var kvp in _updatedReferenceAddressBook)
+            //{
+            //    string prefabPath = kvp.Key;
+
+            //    foreach (UpdatedReference reference in kvp.Value)
+            //    {
+            //        GatherMono(reference);
+
+            //        // * Step: Replace component
+            //        ReplaceTextComponent(reference);
+            //    }
+            //}
 
             try
             {
@@ -154,6 +164,18 @@ namespace FabulousReplacer
                 bool foundClassDeclaration = false;
                 bool insertedReplacerCode = false;
 
+                if (scriptPath.Contains(".cs") == false)
+                {
+                    Debug.LogError($"path does not point to a script file: {scriptPath}");
+                }
+
+                //TODO add check if script already imports TMPro
+                //using (var reader = new StreamReader(scriptPath))
+                //{
+                //    var content = reader.ReadToEnd();
+                //}
+                finalScriptLines.Add("using TMPro;");
+
                 using (var reader = new StreamReader(scriptPath))
                 {
                     string line;
@@ -208,7 +230,7 @@ namespace FabulousReplacer
 
                             insertedReplacerCode = true;
                         }
-                        
+
                         if (fieldSearchRx.IsMatch(line))
                         {
                             // We just want to skip the original field declaration line
@@ -220,10 +242,11 @@ namespace FabulousReplacer
                         }
                     }
 
-                    if (foundTmProUsings == false)
-                    {
-                        finalScriptLines.Insert(0, "using TMPro;");
-                    }
+                    ////TODO How the hell did that get added into a prefab file
+                    //if (foundTmProUsings == false)
+                    //{
+                    //    finalScriptLines.Insert(0, "using TMPro;");
+                    //}
                 }
             }
             catch (IOException e)
@@ -296,15 +319,6 @@ namespace FabulousReplacer
             // * If you want to edit a prefab, make sure you just loaded it and you work on a fresh, crunchy instance
             Component prefab = AssetDatabase.LoadAssetAtPath(updatedReference.prefabPath, typeof(Component)) as Component;
 
-            // if (_reloadedComponents.ContainsKey(updatedReference.prefabPath))
-            // {
-            //     prefab = _reloadedComponents[updatedReference.prefabPath];
-            // }
-            // else
-            // {
-            //     prefab = AssetDatabase.LoadAssetAtPath(updatedReference.prefabPath, typeof(Component)) as Component;
-            // }
-
             Text oldText = FabulousExtensions
                 .GetGameObjectAtAddress(prefab.gameObject, updatedReference.TextAddress)
                 .GetComponent<Text>();
@@ -319,11 +333,6 @@ namespace FabulousReplacer
                 newText = FabulousExtensions
                     .GetGameObjectAtAddress(prefab.gameObject, updatedReference.TextAddress)
                     .GetComponent<TextMeshProUGUI>();
-
-                if (updatedReference.textInformation.Text.Contains("ALTERED"))
-                {
-                    Debug.Log($"0 {newText}, {newText.color} {newText}");
-                }
             }
 
             newText.text = textInfo.Text;
@@ -333,9 +342,18 @@ namespace FabulousReplacer
             newText.color = textInfo.FontColor;
             newText.enableWordWrapping = true;
 
+            // TODO oki that is a small hack
+            // using original font size as max size and always enabling auto sizing
+            newText.fontSizeMax = textInfo.FontSize;
+            //newText.enableAutoSizing = textInfo.AutoSize;
+            newText.enableAutoSizing = true;
+
+            newText.fontSizeMin = textInfo.MinSize;
+            newText.richText = textInfo.IsRichText;
+            newText.characterSpacing = -1.1f;
+
             PrefabUtility.RecordPrefabInstancePropertyModifications(newText);
             PrefabUtility.SavePrefabAsset(prefab.gameObject);
-            // AssetDatabase.SaveAssets();
 
             // AssetDatabase.SaveAssets();
             // //* You may think the line below is not important but I've lost 4hours of work debugging why nested prefabs don't save their changes

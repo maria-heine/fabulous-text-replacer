@@ -11,6 +11,10 @@ namespace FabulousReplacer
         public string Text;
         public int FontSize;
         public Color FontColor;
+        public bool AutoSize;
+        public int MaxSize;
+        public int MinSize;
+        public bool IsRichText;
         
         public TextAnchor Alignment { private get; set; }
         public TextAlignmentOptions TMProAlignment
@@ -50,6 +54,10 @@ namespace FabulousReplacer
             Alignment = text.alignment;
             FontSize = text.fontSize;
             FontColor = text.color;
+            AutoSize = text.resizeTextForBestFit;
+            MaxSize = text.resizeTextMaxSize;
+            MinSize = text.resizeTextMinSize;
+            IsRichText = text.supportRichText;
         }
     }
 }

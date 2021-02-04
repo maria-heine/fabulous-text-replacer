@@ -112,6 +112,133 @@ namespace FabulousReplacer
         //
         #region Initialization
 
+        private void DrawReplacerButtons(VisualElement root)
+        {
+            var container = new Box();
+            root.Add(container);
+
+            var label = new Label() { text = "Replacer" };
+            container.Add(label);
+
+            Button initializeButton = new Button(() =>
+            {
+                //* Where to search for prefabs (depending on whether we make a backup or not)
+                // ! Prefab backup abandoned
+                UpdatedReferenceAddressBook.ClearAddressBook();
+                LoadAllPrefabs();
+                FindCrossPrefabReferences();
+                FindScriptReferences();
+                UpgradeProgressBar.Invoke();
+            })
+            { text = "Initialize" };
+            container.Add(initializeButton);
+
+            IntegerField analysisDepth = new IntegerField("Prefab Analysis Depth");
+            analysisDepth.value = FabulousTextComponentReplacer.WORK_DEPTH;
+            container.Add(analysisDepth);
+
+            var analysePrefabsButton = new Button()
+            { text = "Analyse prefabs" };
+            container.Add(analysePrefabsButton);
+
+            IntegerField lowRange = new IntegerField("Replacement low range");
+            lowRange.value = 0;
+            container.Add(lowRange);
+
+            IntegerField highRange = new IntegerField("Replacement high range");
+            highRange.value = 20;
+            container.Add(highRange);
+
+            var updateComponentsButton = new Button()
+            { text = "Update components" };
+            _componentReplacer = 
+                new ComponentReplacer(
+                    UpdatedReferenceAddressBook, 
+                    updateComponentsButton,
+                    lowRange,
+                    highRange);
+            container.Add(updateComponentsButton);
+
+            var referenceUpdateButton = new Button()
+            { text = "Update references" };
+            _referenceUpdater = 
+                new ReferenceUpdater(
+                    UpdatedReferenceAddressBook, 
+                    referenceUpdateButton,
+                    lowRange,
+                    highRange);
+            container.Add(referenceUpdateButton);
+
+            analysePrefabsButton.clicked += () =>
+            {
+                List<string> analysisResultsParts = new List<string>();
+
+                int currentDepth = 0;
+                var msb = new MultilineStringBuilder("1 - Prefab analysis");
+
+                foreach (var prefab in _loadedPrefabs)
+                {
+                    if (msb.Length > 5000)
+                    {
+                        analysisResultsParts.Add(msb.ToString());
+                        msb = new MultilineStringBuilder($"{analysisResultsParts.Count + 1} - Prefab analysis");
+                    }
+
+                    if (analysisDepth.value != -1 && currentDepth >= analysisDepth.value) break;
+
+                    AnalyzePrefab(prefab, msb, ref currentDepth);
+                }
+
+                analysisResultsParts.Add(msb.ToString());
+
+                UpgradeProgressBar.Invoke();
+
+                DisplayInBox(GetTextBlock(analysisResultsParts));
+            };
+        }
+
+        private void DrawProgressStatus(Box menuBox)
+        {
+            var container = new Box();
+            menuBox.Add(container);
+
+            var label = new Label() { text = "Progress status" };
+            container.Add(label);
+
+            var totalTextCount = new TextElement();
+            container.Add(totalTextCount);
+
+            var missedTextComponentCount = new TextElement();
+            missedTextComponentCount.style.color = Color.red;
+            container.Add(missedTextComponentCount);
+
+            var totalTextReference = new TextElement();
+            totalTextReference.style.color = Color.black;
+            container.Add(totalTextReference);
+
+            var missedTextReferences = new TextElement();
+            missedTextReferences.style.color = Color.red;
+            container.Add(missedTextReferences);
+
+            var progressBar = new ProgressBar();
+            progressBar.style.height = new StyleLength(15f);
+            progressBar.title = "Progress";
+            container.Add(progressBar);
+
+            UpgradeProgressBar += () =>
+            {
+                totalTextCount.text = $"Total Text Component Count: {_replaceCounter.totalTextComponentCount.ToString()}";
+                // TODO Add escond progress bar
+                totalTextReference.text = $"Total Text Reference Count: {_replaceCounter.totalTextComponentReferencesCount.ToString()}";
+                missedTextReferences.text = $"Missed Component Count: {(_replaceCounter.totalTextComponentReferencesCount - _replaceCounter.updatedTextComponentReferencesCount).ToString()}";
+                progressBar.value = ((float)_replaceCounter.updatedTextComponentReferencesCount / _replaceCounter.totalTextComponentReferencesCount) * 100f;
+                if (progressBar.value > 90f)
+                {
+                    progressBar.title = $"{progressBar.value}% references coverage";
+                }
+            };
+        }
+
         private void LoadAllPrefabs()
         {
             _loadedPrefabs = new List<GameObject>();
@@ -248,115 +375,6 @@ namespace FabulousReplacer
                     }
                 }
             }
-        }
-
-        private void DrawReplacerButtons(VisualElement root)
-        {
-            var container = new Box();
-            root.Add(container);
-
-            var label = new Label() { text = "Replacer" };
-            container.Add(label);
-
-            Button initializeButton = new Button(() =>
-            {
-                //* Where to search for prefabs (depending on whether we make a backup or not)
-                // ! Prefab backup abandoned
-                UpdatedReferenceAddressBook.ClearAddressBook();
-                LoadAllPrefabs();
-                FindCrossPrefabReferences();
-                FindScriptReferences();
-                UpgradeProgressBar.Invoke();
-            })
-            { text = "Initialize" };
-            container.Add(initializeButton);
-
-            IntegerField analysisDepth = new IntegerField("Prefab Analysis Depth");
-            analysisDepth.value = FabulousTextComponentReplacer.WORK_DEPTH;
-            container.Add(analysisDepth);
-
-            var analysePrefabsButton = new Button()
-            { text = "Analyse prefabs" };
-            container.Add(analysePrefabsButton);
-
-            var updateComponentsButton = new Button()
-            { text = "Update components" };
-            _componentReplacer = new ComponentReplacer(UpdatedReferenceAddressBook, updateComponentsButton);
-            container.Add(updateComponentsButton);
-
-            var referenceUpdateButton = new Button()
-            { text = "Update references" };
-            _referenceUpdater = new ReferenceUpdater(UpdatedReferenceAddressBook, referenceUpdateButton);
-            container.Add(referenceUpdateButton);
-
-            analysePrefabsButton.clicked += () =>
-            {
-                List<string> analysisResultsParts = new List<string>();
-
-                int currentDepth = 0;
-                var msb = new MultilineStringBuilder("1 - Prefab analysis");
-
-                foreach (var prefab in _loadedPrefabs)
-                {
-                    if (msb.Length > 5000)
-                    {
-                        analysisResultsParts.Add(msb.ToString());
-                        msb = new MultilineStringBuilder($"{analysisResultsParts.Count + 1} - Prefab analysis");
-                    }
-
-                    if (analysisDepth.value != -1 && currentDepth >= analysisDepth.value) break;
-
-                    AnalyzePrefab(prefab, msb, ref currentDepth);
-                }
-
-                analysisResultsParts.Add(msb.ToString());
-
-                UpgradeProgressBar.Invoke();
-
-                DisplayInBox(GetTextBlock(analysisResultsParts));
-            };
-        }
-
-        private void DrawProgressStatus(Box menuBox)
-        {
-            var container = new Box();
-            menuBox.Add(container);
-
-            var label = new Label() { text = "Progress status" };
-            container.Add(label);
-
-            var totalTextCount = new TextElement();
-            container.Add(totalTextCount);
-
-            var missedTextComponentCount = new TextElement();
-            missedTextComponentCount.style.color = Color.red;
-            container.Add(missedTextComponentCount);
-
-            var totalTextReference = new TextElement();
-            totalTextReference.style.color = Color.black;
-            container.Add(totalTextReference);
-
-            var missedTextReferences = new TextElement();
-            missedTextReferences.style.color = Color.red;
-            container.Add(missedTextReferences);
-
-            var progressBar = new ProgressBar();
-            progressBar.style.height = new StyleLength(15f);
-            progressBar.title = "Progress";
-            container.Add(progressBar);
-
-            UpgradeProgressBar += () =>
-            {
-                totalTextCount.text = $"Total Text Component Count: {_replaceCounter.totalTextComponentCount.ToString()}";
-                // TODO Add escond progress bar
-                totalTextReference.text = $"Total Text Reference Count: {_replaceCounter.totalTextComponentReferencesCount.ToString()}";
-                missedTextReferences.text = $"Missed Component Count: {(_replaceCounter.totalTextComponentReferencesCount - _replaceCounter.updatedTextComponentReferencesCount).ToString()}";
-                progressBar.value = ((float)_replaceCounter.updatedTextComponentReferencesCount / _replaceCounter.totalTextComponentReferencesCount) * 100f;
-                if (progressBar.value > 90f)
-                {
-                    progressBar.title = $"{progressBar.value}% references coverage";
-                }
-            };
         }
 
         #endregion // Initialization

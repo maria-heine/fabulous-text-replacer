@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEditor;
+using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -13,10 +14,14 @@ namespace FabulousReplacer
         const string TMPRO_TEXT_SUFFIX = "TMPro";
 
         UpdatedReferenceAddressBook _updatedReferenceAddressBook;
+        IntegerField lowRange;
+        IntegerField highRange;
 
-        public ReferenceUpdater(UpdatedReferenceAddressBook referenceAddressBook, Button updateReferencesButton)
+        public ReferenceUpdater(UpdatedReferenceAddressBook referenceAddressBook, Button updateReferencesButton, IntegerField lowRange, IntegerField highRange)
         {
             _updatedReferenceAddressBook = referenceAddressBook;
+            this.lowRange = lowRange;
+            this.highRange = highRange;
 
             updateReferencesButton.clicked += () =>
             {
@@ -26,15 +31,24 @@ namespace FabulousReplacer
 
         void RunUpdateReferencesLogic()
         {
-            foreach (var kvp in _updatedReferenceAddressBook)
+            //foreach (var kvp in _updatedReferenceAddressBook)
+            //{
+
+            int from = lowRange.value >= _updatedReferenceAddressBook.Count ? _updatedReferenceAddressBook.Count : lowRange.value;
+            int to = highRange.value >= _updatedReferenceAddressBook.Count ? _updatedReferenceAddressBook.Count : highRange.value;
+
+            for (int i = from; i < to; i++)
             {
-                string prefabPath = kvp.Key;
+                IEnumerable<UpdatedReference> references = _updatedReferenceAddressBook[i];
+                string prefabPath = _updatedReferenceAddressBook.Paths[i];
+
                 Component prefab = AssetDatabase.LoadAssetAtPath(prefabPath, typeof(Component)) as Component;
 
                 Debug.Log($"<color=red>Updating for {prefabPath}</color>");
 
-                foreach (UpdatedReference reference in kvp.Value)
+                foreach (UpdatedReference reference in references)
                 {
+
                     if (!reference.isReferenced)
                     {
                         continue;

@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
@@ -25,6 +26,22 @@ namespace FabulousReplacer
         
         [SerializeField] List<FakeDictionary> fakePrefabsUpdatedReferences;
 
+        private string[] paths;
+        public string[] Paths
+        {
+            get
+            {
+                if (paths == null)
+                {
+                    paths = fakePrefabsUpdatedReferences.Select(x => x.prefabPath).Distinct().ToArray();
+                }
+
+                return paths;
+            }
+        }
+
+        public int Count => Paths.Length; 
+
         public List<UpdatedReference> this[string prefabPath]
         {
             get
@@ -47,6 +64,17 @@ namespace FabulousReplacer
                 {
                     return entry.updatedReferences;
                 }
+            }
+        }
+
+        public IEnumerable<UpdatedReference> this[int i]
+        {
+            get
+            {
+                List<UpdatedReference> references = new List<UpdatedReference>();
+               return fakePrefabsUpdatedReferences
+                    .Where(y => y.prefabPath == Paths[i])
+                    .SelectMany(x => x.updatedReferences);
             }
         }
 
