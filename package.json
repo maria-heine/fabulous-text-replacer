@@ -4,7 +4,7 @@
   "displayName": "fabulous-text-replacer",
   "description": "A fabulous UI.Text to TMPro.Text-mesh-thing-ui mass replacer",
   "dependencies": {
-    "com.unity.textmeshpro": "3.0.1"
+    "com.unity.textmeshpro": "2.1.3"
   },
   "keywords": [
     "utility"

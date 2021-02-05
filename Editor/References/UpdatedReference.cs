@@ -81,7 +81,11 @@ namespace FabulousReplacer
         {
             get
             {
-                if (monoType == null) Debug.LogError($"{monoAssemblyName} Type is already null");
+                if (monoType == null)
+                {
+                    Debug.LogError($"{monoAssemblyName} Type is already null at {rootPrefabName}");
+                    monoType = Type.GetType(monoAssemblyName);
+                }
                 return monoType;
             }
             set

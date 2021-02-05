@@ -31,7 +31,7 @@ namespace FabulousReplacer
         {
             get
             {
-                if (paths == null)
+                if (paths == null || paths.Length == 0)
                 {
                     paths = fakePrefabsUpdatedReferences.Select(x => x.prefabPath).Distinct().ToArray();
                 }
@@ -81,6 +81,7 @@ namespace FabulousReplacer
         public void ClearAddressBook()
         {
             fakePrefabsUpdatedReferences = new List<FakeDictionary>();
+            paths = null;
         }
 
         //
