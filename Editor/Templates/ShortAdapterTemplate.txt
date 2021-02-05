@@ -1,6 +1,7 @@
+
 // {0} Field 
 private TextToTextMeshProAdapter {0}Adapter;
-public TextMeshProUGUI {0}TMPro;
+[SerializeField] private TextMeshProUGUI {0}TMPro;
 public Text {0}
 {
     get
