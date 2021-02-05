@@ -133,21 +133,23 @@ namespace FabulousReplacer
                 List<string> fieldNames = item.Value;
 
                 string scriptFileName = monoType.Name;
-                string[] assets = AssetDatabase.FindAssets($"{scriptFileName}");
-                var path = AssetDatabase.GUIDToAssetPath(assets[0]);
+                string[] assets = AssetDatabase.FindAssets($"{scriptFileName} t:MonoScript");
 
                 if (assets.Length != 1)
                 {
-                    Debug.LogError("Well, really we shouldn't find less or more than exactly one asset like that");
+                    Debug.LogError($"Well, really we shouldn't find less or more than exactly one asset like that: {scriptFileName}");
+
+                    foreach (string asset in assets)
+                    {
+                        Debug.LogError($"{AssetDatabase.GUIDToAssetPath(asset)}");
+                    }
+
+                    continue;
                 }
-                else if (AssetDatabase.GetMainAssetTypeAtPath(path) != typeof(UnityEditor.MonoScript))
-                {
-                    Debug.LogError($"What on earth did you find? path: {path}");
-                }
+
+                var path = AssetDatabase.GUIDToAssetPath(assets[0]);
 
                 List<string> scriptLines = GetUpdatedScriptLines(path, monoType, fieldNames);
-
-                Debug.Log($"{scriptLines}");
 
                 SaveUpdateScript(path, scriptLines);
             }
@@ -170,10 +172,6 @@ namespace FabulousReplacer
                 }
 
                 //TODO add check if script already imports TMPro
-                //using (var reader = new StreamReader(scriptPath))
-                //{
-                //    var content = reader.ReadToEnd();
-                //}
                 finalScriptLines.Add("using TMPro;");
 
                 using (var reader = new StreamReader(scriptPath))
