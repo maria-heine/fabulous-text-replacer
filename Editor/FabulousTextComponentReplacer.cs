@@ -17,7 +17,7 @@ namespace FabulousReplacer
 {
     public partial class FabulousTextComponentReplacer : EditorWindow
     {
-        public const int WORK_DEPTH = 1;
+        public const int WORK_DEPTH = -1;
         const string SEARCH_DIRECTORY = "Assets/RemoteAssets";
         /*
         ! Note that "Assets/Original/Prefabs"
