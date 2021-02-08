@@ -1,17 +1,4 @@
 
 // field: {0} 
-private TMProAdapter {0}Adapter;
 [SerializeField] private TextMeshProUGUI {0}TMPro;
-public Text {0}
-{
-    get
-    {
-        if ({0}Adapter == null)
-        {
-            {0}Adapter = transform
-                .Find(ADAPTERS_PARENT_NAME)
-                .GetComponent<TMProAdapterParent>()["{0}"];
-        }
-        return {0}Adapter as Text;
-    }
-}
+[SerializeField, HideInInspector] private TMProAdapter {0};

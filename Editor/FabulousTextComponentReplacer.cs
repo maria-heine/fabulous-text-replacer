@@ -32,8 +32,8 @@ namespace FabulousReplacer
         Dictionary<Type, List<GameObject>> _scriptReferences;
         Dictionary<GameObject, List<Type>> _scriptsByPrefab;
         ReplaceCounter _replaceCounter;
+        ScriptUpdater _scriptUpdater;
         ComponentReplacer _componentReplacer;
-        ReferenceUpdater _referenceUpdater;
         UpdatedReferenceAddressBook _updatedReferenceAddressBook;
 
         Box _boxDisplayer;
@@ -152,6 +152,16 @@ namespace FabulousReplacer
             _highRange.value = 20;
             container.Add(_highRange);
 
+            var updateScriptsButton = new Button()
+            { text = "Update scripts" };
+            _scriptUpdater = 
+                new ScriptUpdater(
+                    UpdatedReferenceAddressBook, 
+                    updateScriptsButton,
+                    _lowRange,
+                    _highRange);
+            container.Add(updateScriptsButton);
+
             var updateComponentsButton = new Button()
             { text = "Update components" };
             _componentReplacer = 
@@ -161,16 +171,6 @@ namespace FabulousReplacer
                     _lowRange,
                     _highRange);
             container.Add(updateComponentsButton);
-
-            var referenceUpdateButton = new Button()
-            { text = "Update references" };
-            _referenceUpdater = 
-                new ReferenceUpdater(
-                    UpdatedReferenceAddressBook, 
-                    referenceUpdateButton,
-                    _lowRange,
-                    _highRange);
-            container.Add(referenceUpdateButton);
 
             analysePrefabsButton.clicked += () =>
             {
@@ -645,7 +645,7 @@ namespace FabulousReplacer
 
         private void SaveTextReferences(string sourcePrefabPath, GameObject prefabParent, Text textComponent)
         {
-            //TODO test part
+            // Separately add each text component as unreferenced version
             UpdatedReference unreferencedTextComponent = new UpdatedReference(prefabParent, textComponent);
             UpdatedReferenceAddressBook[sourcePrefabPath].Add(unreferencedTextComponent);
 

@@ -18,17 +18,17 @@ namespace FabulousReplacer
 {
     public class ComponentReplacer
     {
+        private const string ADAPTER_PARENT_NAME = "{0}_TextAdaptersParent";
+        private const string ADAPTER_GAMEOBJECT_NAME = "{0}_TMProAdapter";
+
         UpdatedReferenceAddressBook _updatedReferenceAddressBook;
-        Dictionary<Type, List<string>> _updatedMonoFields;
         IntegerField lowRange;
         IntegerField highRange;
-
         TMP_FontAsset fontAsset;
 
         public ComponentReplacer(UpdatedReferenceAddressBook updatedReferenceAddressBook, Button updateComponentsButton, IntegerField lowRange, IntegerField highRange)
         {
             _updatedReferenceAddressBook = updatedReferenceAddressBook;
-            _updatedMonoFields = new Dictionary<Type, List<string>>();
             this.lowRange = lowRange;
             this.highRange = highRange;
 
@@ -42,8 +42,6 @@ namespace FabulousReplacer
                 .LoadAssetAtPath("Packages/com.mariaheineboombyte.fabulous-text-replacer/TextMeshProFonts/Oswald/Oswald-SemiBold SDF.asset", typeof(TMP_FontAsset)) as TMP_FontAsset;
         }
 
-        // TODO What about private Text fields?
-        // ! I am still missing the case of text components that dont have references at all
         private void RunReplaceLogic()
         {
             int from = lowRange.value >= _updatedReferenceAddressBook.Count ? _updatedReferenceAddressBook.Count : lowRange.value;
@@ -55,255 +53,10 @@ namespace FabulousReplacer
 
                 foreach (UpdatedReference reference in references)
                 {
-                    GatherMono(reference);
-
-                    // * Step: Replace component
                     ReplaceTextComponent(reference);
                 }
             }
-
-            //foreach (var kvp in _updatedReferenceAddressBook)
-            //{
-            //    string prefabPath = kvp.Key;
-
-            //    foreach (UpdatedReference reference in kvp.Value)
-            //    {
-            //        GatherMono(reference);
-
-            //        // * Step: Replace component
-            //        ReplaceTextComponent(reference);
-            //    }
-            //}
-
-            try
-            {
-                AssetDatabase.StartAssetEditing();
-                MassReplaceFields();
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError(ex.Message + ex.StackTrace);
-            }
-            finally
-            {
-                AssetDatabase.StopAssetEditing();
-            }
-
-            CompilationPipeline.RequestScriptCompilation();
-
-            // CompilationPipeline.compilationFinished += stuff =>
-            // {
-
-            // };
-
-            // CompilationPipeline.RequestScriptCompilation();
         }
-
-        //
-        // ─── SCRIPT REPLACEMENT ──────────────────────────────────────────
-        //
-
-        #region SCRIPT REPLACEMENT 
-
-        private void GatherMono(UpdatedReference reference)
-        {
-            if (reference.isReferenced)
-            {
-                Type monoType = reference.MonoType;
-                string fieldName = reference.fieldName;
-
-                if (_updatedMonoFields.ContainsKey(monoType) && _updatedMonoFields[monoType].Contains(fieldName))
-                {
-                    return;
-                }
-                else if (!_updatedMonoFields.ContainsKey(monoType))
-                {
-                    _updatedMonoFields[monoType] = new List<string>();
-                }
-
-                _updatedMonoFields[monoType].Add(fieldName);
-            }
-        }
-
-        private void MassReplaceFields()
-        {
-            foreach (var item in _updatedMonoFields)
-            {
-                Type monoType = item.Key;
-                List<string> fieldNames = item.Value;
-
-                string scriptFileName = monoType.Name;
-                string[] assets = AssetDatabase.FindAssets($"{scriptFileName} t:MonoScript");
-
-                if (assets.Length != 1)
-                {
-                    Debug.LogError($"Well, really we shouldn't find less or more than exactly one asset like that: {scriptFileName}");
-
-                    foreach (string asset in assets)
-                    {
-                        Debug.LogError($"{AssetDatabase.GUIDToAssetPath(asset)}");
-                    }
-
-                    continue;
-                }
-
-                var path = AssetDatabase.GUIDToAssetPath(assets[0]);
-
-                List<string> scriptLines = GetUpdatedScriptLines(path, monoType, fieldNames);
-
-                SaveUpdateScript(path, scriptLines);
-            }
-        }
-
-        private static List<string> GetUpdatedScriptLines(string scriptPath, Type monoType, List<string> fieldNames)
-        {
-            List<string> finalScriptLines = new List<string>();
-
-            try
-            {
-                //bool foundTmProUsings = false;
-                bool foundClassOpening = false;
-                bool foundClassDeclaration = false;
-                bool insertedReplacerCode = false;
-
-                if (scriptPath.Contains(".cs") == false)
-                {
-                    Debug.LogError($"path does not point to a script file: {scriptPath}");
-                }
-
-                //TODO add check if script already imports TMPro
-                finalScriptLines.Add("using TMPro;");
-
-                using (var reader = new StreamReader(scriptPath))
-                {
-                    string line;
-                    string classPattern = $@"\bclass\s+{monoType.Name}\b";
-                    string classOpenPattern = @"\{";
-                    string indentationPattern = @"^\s+";
-                    string tmProUsingsPattern = @"using\s+TMPro;";
-
-                    //TODO omg what if there is a List of Text components somewhere in zula?
-                    string fieldSearchPattern = @"(";
-                    for (int i = 0; i < fieldNames.Count; i++)
-                    {
-                        fieldSearchPattern += $@"\sText\s+{fieldNames[i]};";
-                        if (i < fieldNames.Count - 1) fieldSearchPattern += "|";
-                    }
-                    fieldSearchPattern += ")";
-
-                    Regex classRx = new Regex(classPattern);
-                    Regex classOpenRx = new Regex(classOpenPattern);
-                    Regex indentRx = new Regex(indentationPattern);
-                    Regex tmProUsingsRx = new Regex(tmProUsingsPattern);
-                    Regex fieldSearchRx = new Regex(fieldSearchPattern);
-
-                    while ((line = reader.ReadLine()) != null)
-                    {
-                        //if (tmProUsingsRx.IsMatch(line))
-                        //{
-                        //    foundTmProUsings = true;
-                        //}
-                        if (classRx.IsMatch(line))
-                        {
-                            foundClassDeclaration = true;
-                        }
-                        else if (foundClassDeclaration && classOpenRx.IsMatch(line))
-                        {
-                            foundClassOpening = true;
-                        }
-                        else if (!insertedReplacerCode && foundClassDeclaration && foundClassOpening)
-                        {
-                            Match indentation = indentRx.Match(line);
-
-                            finalScriptLines.Add(indentation.Value);
-                            finalScriptLines.Add($"{indentation.Value}#region Autogenerated UnityEngine.Text replacer code");
-                            finalScriptLines.Add($"{indentation.Value}/* please don't edit or rename those fields */");
-                            finalScriptLines.Add($"{indentation.Value}private const string ADAPTERS_PARENT_NAME = \"{String.Format(ADAPTER_PARENT_NAME, monoType.Name)}\";");
-                            finalScriptLines.Add($"{indentation.Value}[Header(\"TextmeshPro Fields\")]");
-
-                            foreach (var fieldName in fieldNames)
-                            {
-                                IEnumerable<string> lines = GetAdapterTemplate(fieldName, indentation.Value);
-                                finalScriptLines.AddRange(lines);
-                            }
-
-                            finalScriptLines.Add($"{indentation.Value}/* fin */");
-                            finalScriptLines.Add($"{indentation.Value}#endregion // Autogenerated UnityEngine.Text replacer code ");
-                            finalScriptLines.Add(indentation.Value);
-
-                            insertedReplacerCode = true;
-                        }
-
-                        if (fieldSearchRx.IsMatch(line))
-                        {
-                            // We just want to skip the original field declaration line
-                            continue;
-                        }
-                        else
-                        {
-                            finalScriptLines.Add(line);
-                        }
-                    }
-
-                    ////TODO How the hell did that get added into a prefab file
-                    //if (foundTmProUsings == false)
-                    //{
-                    //    finalScriptLines.Insert(0, "using TMPro;");
-                    //}
-                }
-            }
-            catch (IOException e)
-            {
-                Debug.LogError("The file could not be read:");
-                Debug.LogError(e.Message);
-            }
-
-            return finalScriptLines;
-        }
-
-        private static void SaveUpdateScript(string path, List<string> lines)
-        {
-            try
-            {
-                FileStream stream = new FileStream(path, FileMode.OpenOrCreate);
-                using (var writer = new StreamWriter(stream, Encoding.UTF8))
-                {
-                    foreach (string line in lines)
-                    {
-                        writer.WriteLine(line);
-                    }
-                }
-            }
-            catch (IOException e)
-            {
-                Debug.LogError("The file could not be written:");
-                Debug.LogError(e.Message);
-            }
-        }
-
-        private static List<string> GetAdapterTemplate(string fileName, string indentation)
-        {
-            FileStream stream = new FileStream("Packages/com.mariaheineboombyte.fabulous-text-replacer/Editor/Templates/ShortAdapterTemplate.txt", FileMode.Open);
-
-            string line;
-            List<string> templateLines = new List<string>();
-            string pattern = @"\{0\}";
-
-            Regex rx = new Regex(@"\{0\}");
-
-            using (var reader = new StreamReader(stream))
-            {
-                while ((line = reader.ReadLine()) != null)
-                {
-                    line = Regex.Replace(line, pattern, fileName);
-                    templateLines.Add($"{indentation}{line}");
-                }
-            }
-
-            return templateLines;
-        }
-
-        #endregion // SCRIPT REPLACEMENT
 
         //
         // ─── TEXT COMPONENT REPLACEMENT ──────────────────────────────────
@@ -320,22 +73,52 @@ namespace FabulousReplacer
             // * Whatever you execute on them gets lost in a limbo and flushed down along the garbage collection
             // * If you want to edit a prefab, make sure you just loaded it and you work on a fresh, crunchy instance
 
+            Debug.Log($"<color=yellow>{updatedReference.prefabPath}</color>");
+            
 
             using (var editScope = new EditPrefabAssetScope(updatedReference.prefabPath))
             {
                 GameObject root = editScope.prefabRoot;
                 TextMeshProUGUI tmProText = GetTMProText(updatedReference, textInfo, root);
-                CreateTextAdapter(updatedReference, root, tmProText);
+                TMProAdapter tmProAdapter = CreateTextAdapter(updatedReference, root, tmProText);
                 StyleTMProText(textInfo, tmProText);
+                AssignTMProReference(updatedReference, tmProAdapter, root);
             }
+        }
 
-            // PrefabUtility.RecordPrefabInstancePropertyModifications(newText); //! that might be necessary
-            // PrefabUtility.SavePrefabAsset(prefab.gameObject);
+        private void AssignTMProReference(UpdatedReference reference, TMProAdapter tmProAdapter, GameObject root)
+        {
+            if (reference.isReferenced)
+            {
+                if (tmProAdapter == null)
+                {
+                    Debug.LogError($"Adapter is null for {reference.prefabPath} field {reference.fieldName}");
+                }
 
-            // AssetDatabase.SaveAssets();
-            // //* You may think the line below is not important but I've lost 4hours of work debugging why nested prefabs don't save their changes
-            // AssetDatabase.ForceReserializeAssets(new string[] { updatedReference.prefabPath }, ForceReserializeAssetsOptions.ReserializeAssetsAndMetadata);
-            // AssetDatabase.ImportAsset(updatedReference.prefabPath);
+                Type type = Type.GetType(reference.monoAssemblyName);
+
+                Component mono = FabulousExtensions
+                    .GetGameObjectAtAddress(root, reference.MonoAddress)
+                    .GetComponent(type);
+
+                if (mono == null)
+                {
+                    Debug.LogError($"Failed to find mono by its address for prefab: {root} at path {reference.prefabPath}");
+                    return;
+                }
+
+                foreach (var field in type.GetFields(ReferenceFinder.FIELD_SEARCH_FLAGS))
+                {
+                    if (field.Name == $"{reference.fieldName}TMPro")
+                    {
+                        field.SetValue(mono, tmProAdapter.TMProText);
+                    }
+                    else if (field.Name == $"{reference.fieldName}Adapter")
+                    {
+                        field.SetValue(mono, tmProAdapter);
+                    }
+                }
+            }
         }
 
         private void StyleTMProText(TextInformation textInfo, TextMeshProUGUI tmProText)
@@ -379,17 +162,13 @@ namespace FabulousReplacer
                     .GetComponent<TextMeshProUGUI>();
             }
 
-            Debug.Log($"{updatedReference.fieldName} {updatedReference.rootPrefab} {updatedReference.textInformation.Parent} {newText}");
-            
-
             return newText;
         }
 
-        private const string ADAPTER_PARENT_NAME = "{0}_TextAdaptersParent";
-        private const string ADAPTER_GAMEOBJECT_NAME = "{0}_TMProAdapter";
-
-        private static void CreateTextAdapter(UpdatedReference updatedReference, GameObject root, TextMeshProUGUI newTextComponent)
+        private static TMProAdapter CreateTextAdapter(UpdatedReference updatedReference, GameObject root, TextMeshProUGUI newTextComponent)
         {
+            TMProAdapter adapter = null;
+
             if (updatedReference.isReferenced)
             {
                 string monoTypeShortName = Type
@@ -413,7 +192,6 @@ namespace FabulousReplacer
                 }
 
                 string adapterGameobjectName = String.Format(ADAPTER_GAMEOBJECT_NAME, updatedReference.fieldName);
-                // string adapterGameobjectName = $"{updatedReference.fieldName}_TMProAdapter";
 
                 Transform adapterTransform = adaptersParent.transform.Find(adapterGameobjectName);
 
@@ -421,14 +199,16 @@ namespace FabulousReplacer
                 {
                     GameObject adapterGO = new GameObject(adapterGameobjectName);
                     adapterGO.transform.parent = adaptersParent.transform;
-                    TMProAdapter adapter = adapterGO.AddComponent<TMProAdapter>();
+                    adapter = adapterGO.AddComponent<TMProAdapter>();
                     adapter.SetupAdapter(updatedReference.fieldName, newTextComponent);
                 }
                 else
                 {
-                    Debug.Log($"OOps, there arleady is an adpater for {monoTypeShortName} : {updatedReference.fieldName}");
+                    adapter = adaptersParent.GetComponent<TMProAdapterParent>()[updatedReference.fieldName];
                 }
             }
+
+            return adapter;
         }
 
         #endregion // TEXT COMPONENT REPLACEMENT
