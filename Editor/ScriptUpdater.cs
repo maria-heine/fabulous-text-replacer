@@ -107,19 +107,27 @@ namespace FabulousReplacer
                 string scriptFileName = monoType.Name;
                 string[] assets = AssetDatabase.FindAssets($"{scriptFileName} t:MonoScript");
 
+                string selectedAsset = null;
+
                 if (assets.Length != 1)
                 {
-                    Debug.LogError($"Well, really we shouldn't find less or more than exactly one asset like that: {scriptFileName}");
-
                     foreach (string asset in assets)
                     {
-                        Debug.LogError($"{AssetDatabase.GUIDToAssetPath(asset)}");
-                    }
+                        string assetPath = AssetDatabase.GUIDToAssetPath(asset);
 
-                    continue;
+                        if (assetPath.Contains($"{scriptFileName}.cs"))
+                        {
+                            selectedAsset = asset;
+                            Debug.Log($"From overlapping selections chose: {assetPath}");
+                        }
+                    }
+                }
+                else
+                {
+                    selectedAsset = assets[0];
                 }
 
-                var path = AssetDatabase.GUIDToAssetPath(assets[0]);
+                var path = AssetDatabase.GUIDToAssetPath(selectedAsset);
 
                 List<string> scriptLines = GetUpdatedScriptLines(path, monoType, fieldNames);
 
