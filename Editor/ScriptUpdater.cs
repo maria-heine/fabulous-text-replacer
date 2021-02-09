@@ -13,6 +13,8 @@ using System.Text.RegularExpressions;
 using System.Text;
 using UnityEngine.UI;
 using UnityEditor.UIElements;
+using System.Linq;
+using System.Reflection;
 
 namespace FabulousReplacer
 {
@@ -77,12 +79,48 @@ namespace FabulousReplacer
 
         #region SCRIPT REPLACEMENT 
 
+        // private Type GetFieldDeclaringType(Type type, string field)
+        // {
+        //     FieldInfo fieldInfo = type
+        //         .GetFields(ReferenceFinder.FIELD_SEARCH_FLAGS)
+        //         .Where(f => f.DeclaringType == type)
+        //         .FirstOrDefault(f => f.Name == field);
+            
+        //     if (fieldInfo == null)
+        //     {
+        //         Debug.Log($"{type} didnt contain {field} definition");
+
+        //         type = type.BaseType;
+
+        //         if (type == null)
+        //         {
+        //             Debug.LogError("Failed to find enclosing type.");
+        //             return null;
+        //         }
+
+        //         type = GetFieldDeclaringType(type, field);
+
+        //         Debug.Log($"{type} contained {field} definition yay");
+        //     }
+
+        //     return type;
+        // }
+
         private void GatherMono(UpdatedReference reference)
         {
             if (reference.isReferenced)
             {
                 Type monoType = reference.MonoType;
                 string fieldName = reference.fieldName;
+
+                // Type declaringType = GetFieldDeclaringType(monoType, fieldName);
+
+                // if (declaringType != monoType)
+                // {
+                //     reference.
+                // }
+
+                // monoType = GetFieldDeclaringType(monoType, fieldName);
 
                 if (_updatedMonoFields.ContainsKey(monoType) && _updatedMonoFields[monoType].Contains(fieldName))
                 {

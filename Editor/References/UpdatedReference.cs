@@ -123,9 +123,14 @@ namespace FabulousReplacer
             TextAddress = GetComponentAddressInHierarchy(referencingPrefab, referencedText);
             isReferenced = true;
             
-            this.MonoType = referencingMono.GetType();
-            this.fieldName = fieldName;
+            GetFieldReferencingType(referencingMono, fieldName);
             MonoAddress = GetComponentAddressInHierarchy(referencingPrefab, referencingMono);
+        }
+
+        private void GetFieldReferencingType(MonoBehaviour mono, string fieldName)
+        {
+            this.MonoType = GetFieldDeclaringType(mono.GetType(), fieldName);
+            this.fieldName = fieldName;
         }
     }
 }

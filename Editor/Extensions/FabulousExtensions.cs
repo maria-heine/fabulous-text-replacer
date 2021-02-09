@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
@@ -10,6 +11,33 @@ namespace FabulousReplacer
 {
     public static class FabulousExtensions
     {
+        // Gets the type originally declaring a given field in case 
+        // the passed type is just a child inheriting that field
+        public static Type GetFieldDeclaringType(Type type, string field)
+        {
+            FieldInfo fieldInfo = type
+                .GetFields(ReferenceFinder.FIELD_SEARCH_FLAGS)
+                .Where(f => f.DeclaringType == type)
+                .FirstOrDefault(f => f.Name == field);
+            
+            if (fieldInfo == null)
+            {
+                Debug.Log($"{type} didnt contain {field} definition");
+
+                type = type.BaseType;
+
+                if (type == null)
+                {
+                    Debug.LogError("Failed to find enclosing type.");
+                    return null;
+                }
+
+                type = GetFieldDeclaringType(type, field);
+            }
+
+            return type;
+        }
+
         public static TextElement GetTextElement(string textToDisplay)
         {
             return new TextElement() { text = textToDisplay };

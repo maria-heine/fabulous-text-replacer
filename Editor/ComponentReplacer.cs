@@ -73,9 +73,6 @@ namespace FabulousReplacer
             // * Whatever you execute on them gets lost in a limbo and flushed down along the garbage collection
             // * If you want to edit a prefab, make sure you just loaded it and you work on a fresh, crunchy instance
 
-            Debug.Log($"<color=yellow>{updatedReference.prefabPath}</color>");
-            
-
             using (var editScope = new EditPrefabAssetScope(updatedReference.prefabPath))
             {
                 GameObject root = editScope.prefabRoot;
@@ -113,7 +110,7 @@ namespace FabulousReplacer
                     {
                         field.SetValue(mono, tmProAdapter.TMProText);
                     }
-                    else if (field.Name == $"{reference.fieldName}Adapter")
+                    else if (field.Name == $"{reference.fieldName}")
                     {
                         field.SetValue(mono, tmProAdapter);
                     }
