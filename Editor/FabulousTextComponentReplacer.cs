@@ -154,9 +154,9 @@ namespace FabulousReplacer
 
             var updateScriptsButton = new Button()
             { text = "Update scripts" };
-            _scriptUpdater = 
+            _scriptUpdater =
                 new ScriptUpdater(
-                    UpdatedReferenceAddressBook, 
+                    UpdatedReferenceAddressBook,
                     updateScriptsButton,
                     _lowRange,
                     _highRange);
@@ -164,9 +164,9 @@ namespace FabulousReplacer
 
             var updateComponentsButton = new Button()
             { text = "Update components" };
-            _componentReplacer = 
+            _componentReplacer =
                 new ComponentReplacer(
-                    UpdatedReferenceAddressBook, 
+                    UpdatedReferenceAddressBook,
                     updateComponentsButton,
                     _lowRange,
                     _highRange);
@@ -242,6 +242,28 @@ namespace FabulousReplacer
             };
         }
 
+        private List<string> ExcludedPaths = new List<string>()
+        {
+            "Assets/RemoteAssets/UI/InGame/NavigatorHUD/NavigatorHUDView.prefab",
+            "Assets/RemoteAssets/UI/InGame/QuickChatHUD/QuickChatPanelHUDView.prefab",
+            "Assets/RemoteAssets/UI/Popup/CardRarityBonusPopup.prefab"
+        };
+
+        //! This is the dirtiest thing in the entire replacer code here, I am sorry for that, sacrifices had to be made
+        private bool CheckAgainstExcludedPaths(string path)
+        {
+            foreach (string excludedPath in ExcludedPaths)
+            {
+                if (path == excludedPath)
+                {
+                    Debug.Log($"Excluding {path}");
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         private void LoadAllPrefabs()
         {
             _loadedPrefabs = new List<GameObject>();
@@ -257,6 +279,11 @@ namespace FabulousReplacer
             for (int i = 0; i < assets.Length; i++)
             {
                 string objectsPath = AssetDatabase.GUIDToAssetPath(assets[i]);
+
+                if (CheckAgainstExcludedPaths(objectsPath))
+                {
+                    continue;
+                }
 
                 UnityEngine.Object topAsset = AssetDatabase.LoadAssetAtPath(objectsPath, typeof(Component));
 
@@ -407,7 +434,7 @@ namespace FabulousReplacer
 
                 msb.AddLine($"Total length of address book is {UpdatedReferenceAddressBook.Paths.Length}");
 
-                for(int i = _lowRange.value; i < _highRange.value; i++)
+                for (int i = _lowRange.value; i < _highRange.value; i++)
                 {
                     msb.AddLine(UpdatedReferenceAddressBook.Paths[i]);
                 }
@@ -534,6 +561,8 @@ namespace FabulousReplacer
         //
 
         #region ANALYSIS
+
+
 
         private void AnalyzePrefab(GameObject originalPrefab, MultilineStringBuilder msb, ref int currentDepth)
         {

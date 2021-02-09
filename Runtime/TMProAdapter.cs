@@ -14,22 +14,28 @@ public class TMProAdapter : Text
 
     public string AdapterFieldName => _fieldName;
     public TextMeshProUGUI TMProText => _textMesh;
+    public new GameObject gameObject => _textMesh.gameObject;
+    public new Transform transform => _textMesh.transform;
+    public override string text
+    {
+        get => _textMesh.text;
+        set => _textMesh.text = value;
+    }
+    public override Color color
+    {
+        get => _textMesh.color;
+        set => _textMesh.color = value;
+    }
 
-    public void SetupAdapter(string fieldName, TextMeshProUGUI textMesh)
+    private void Awake()
     {
         enabled = false;
         raycastTarget = false;
-        
-        _textMesh = textMesh;
-        _fieldName = fieldName;
     }
 
-    public new GameObject gameObject => _textMesh.gameObject;
-    public new Transform transform => _textMesh.transform;
-
-    public override string text 
-    { 
-        get => _textMesh.text;
-        set => _textMesh.text = value; 
+    public void SetupAdapter(string fieldName, TextMeshProUGUI textMesh)
+    {
+        _textMesh = textMesh;
+        _fieldName = fieldName;
     }
 }
