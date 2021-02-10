@@ -19,6 +19,13 @@ namespace FabulousReplacer
     {
         public const int WORK_DEPTH = -1;
         const string SEARCH_DIRECTORY = "Assets/RemoteAssets";
+        private readonly List<string> ExcludedAssetPaths = new List<string>()
+        {
+            "Assets/RemoteAssets/UI/InGame/NavigatorHUD/NavigatorHUDView.prefab",
+            "Assets/RemoteAssets/UI/InGame/QuickChatHUD/QuickChatPanelHUDView.prefab",
+            "Assets/RemoteAssets/UI/Popup/CardRarityBonusPopup.prefab"
+        };
+
         /*
         ! Note that "Assets/Original/Prefabs"
         ! is entirely different than "Assets/Original/Prefabs/"
@@ -112,9 +119,10 @@ namespace FabulousReplacer
         #endregion //  EDITOR WINDOW STARTUP
 
         //
-        // ─── INITIALIZATION ─────────────────────────────────────────────────────────────
+        // ─── EDITOR DRAWING ──────────────────────────────────────────────
         //
-        #region Initialization
+
+        #region Editor Drawing    
 
         private void DrawReplacerMenu(VisualElement root)
         {
@@ -249,6 +257,8 @@ namespace FabulousReplacer
             };
         }
 
+        #endregion // Editor Drawing
+
         //
         // ─── PREFAB LOADING ─────────────────────────────────────
         //
@@ -268,7 +278,7 @@ namespace FabulousReplacer
             }
             else
             {
-                LoadAllPrefabs();
+                assetPaths = GetAllAssetPaths(new[] { SEARCH_DIRECTORY });
             }
 
             LoadSelectedAssets(assetPaths);
@@ -278,11 +288,6 @@ namespace FabulousReplacer
         {
             for (int i = 0; i < assetPath.Length; i++)
             {
-                if (CheckAgainstExcludedPaths(assetPath[i]))
-                {
-                    continue;
-                }
-
                 UnityEngine.Object topAsset = AssetDatabase.LoadAssetAtPath(assetPath[i], typeof(Component));
 
                 try
@@ -314,23 +319,12 @@ namespace FabulousReplacer
 
             string[] paths = prefabsBook.SelectedPrefabs.Select(o => AssetDatabase.GetAssetPath(o)).ToArray();
 
-            Debug.Log($"{paths[0]}");
-            
-
             return paths;
         }
 
-        private List<string> ExcludedPaths = new List<string>()
+        private bool IsExcludedPath(string path)
         {
-            "Assets/RemoteAssets/UI/InGame/NavigatorHUD/NavigatorHUDView.prefab",
-            "Assets/RemoteAssets/UI/InGame/QuickChatHUD/QuickChatPanelHUDView.prefab",
-            "Assets/RemoteAssets/UI/Popup/CardRarityBonusPopup.prefab"
-        };
-
-        //! This is the dirtiest thing in the entire replacer code here, I am sorry for that, sacrifices had to be made
-        private bool CheckAgainstExcludedPaths(string path)
-        {
-            foreach (string excludedPath in ExcludedPaths)
+            foreach (string excludedPath in ExcludedAssetPaths)
             {
                 if (path == excludedPath)
                 {
@@ -342,47 +336,21 @@ namespace FabulousReplacer
             return false;
         }
 
-        private void LoadAllPrefabs()
+        private string[] GetAllAssetPaths(string[] searchLocation)
         {
             /* 
             * Note: This will count both directories and script files as assets
             */
-            string[] assets = AssetDatabase.FindAssets("t:Object", new[] { SEARCH_DIRECTORY });
+            string[] assets = AssetDatabase.FindAssets("t:Object", searchLocation);
 
             Debug.Log($"Found {assets.Length} assets.");
 
-            for (int i = 0; i < assets.Length; i++)
-            {
-                string objectsPath = AssetDatabase.GUIDToAssetPath(assets[i]);
+            string[] paths = assets
+                .Select(asset => AssetDatabase.GUIDToAssetPath(asset))
+                .Where(path => !IsExcludedPath(path))
+                .ToArray();
 
-                if (CheckAgainstExcludedPaths(objectsPath))
-                {
-                    continue;
-                }
-
-                UnityEngine.Object topAsset = AssetDatabase.LoadAssetAtPath(objectsPath, typeof(Component));
-
-                try
-                {
-                    // Since only prefabs in assets will have a component as it's root
-                    if (topAsset is Component c)
-                    {
-                        bool hasMonobehaviour = c.GetComponentInChildren<MonoBehaviour>(includeInactive: true) != null;
-                        bool hasRectTransform = c.GetComponentInChildren<RectTransform>(includeInactive: true) != null;
-                        if (hasRectTransform)
-                        {
-                            _loadedPrefabs.Add(c.gameObject);
-                            // ! Counting all found text components
-                            _replaceCounter.totalTextComponentCount += c.gameObject.GetComponentsInChildren<Text>(includeInactive: true).Count();
-                        }
-                    }
-                }
-                catch (Exception)
-                {
-                    /* Because I don't care about those two unnameable ghostly objects that exist and yet they don't */
-                    Debug.Log($"Prefabl searcher exception for path: {objectsPath}");
-                }
-            }
+            return paths;
         }
 
         private void FindCrossPrefabReferences()
@@ -483,8 +451,6 @@ namespace FabulousReplacer
         }
 
         #endregion // Prefab Loading
-
-        #endregion // Initialization
 
         //
         // ─── LOGGING ────────────────────────────────────────────────────────────────────
@@ -754,6 +720,7 @@ namespace FabulousReplacer
             UpdatedReferenceAddressBook[sourcePrefabPath].Add(unreferencedTextComponent);
 
             var updatedReferences = CheckTextAgainstFoundMonobehaviours(textComponent, prefabParent);
+
             foreach (UpdatedReference updatedReference in updatedReferences)
             {
                 UpdatedReferenceAddressBook[sourcePrefabPath].Add(updatedReference);
@@ -767,11 +734,7 @@ namespace FabulousReplacer
 
             foreach (MonoBehaviour mono in monoBehaviours)
             {
-                if (mono.GetType().Name.Contains("ChatButton"))
-                {
-                    Debug.Log($"mono: {mono} text: {textComponent.text}");
-                }
-                if (mono.IsReferencingComponent(anotherComponent: textComponent, out string fieldName))
+                if (mono.IsReferencingComponentOfType<Text>(anotherComponent: textComponent, out string fieldName))
                 {
                     if (mono.GetType().Name.Contains("ChatButton"))
                     {
