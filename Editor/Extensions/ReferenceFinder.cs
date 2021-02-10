@@ -15,14 +15,26 @@ namespace FabulousReplacer
 
         #region PRIVATE
 
-        private static void IterateOverFields<T>(MonoBehaviour owner, Action<FieldInfo, T> onMatchingField)
+        private static void IterateOverFieldsOfType<T>(Component owner, Action<FieldInfo, T> onMatchingField, bool includeParnetMonoFields = false)
+            where T : Component
         {
-            FieldInfo[] fields = owner.GetType().GetFields(FIELD_SEARCH_FLAGS);
+            Type ownerType = owner.GetType();
 
-            fields.ExecuteOnAllFieldsOfType<T>(owner, onMatchingField);
+            List<FieldInfo> fields = ownerType.GetFields(FIELD_SEARCH_FLAGS).ToList();
+
+            if (includeParnetMonoFields)
+            {
+                while (ownerType.BaseType != null)
+                {
+                    ownerType = ownerType.BaseType;
+                    fields.AddRange(ownerType.GetFields(FIELD_SEARCH_FLAGS));
+                }
+            }
+
+            fields.ToArray().ExecuteOnAllFieldsOfType<T>(owner, onMatchingField);
         }
 
-        private static void ExecuteOnAllFieldsOfType<T>(this FieldInfo[] fields, MonoBehaviour owner, Action<FieldInfo, T> onEachField)
+        private static void ExecuteOnAllFieldsOfType<T>(this FieldInfo[] fields, Component owner, Action<FieldInfo, T> onEachField)
         {
             foreach (FieldInfo field in fields)
             {
@@ -150,58 +162,78 @@ namespace FabulousReplacer
             return foundTFields.Count > 0;
         }
         
-        //TODO remove this one
-        [Obsolete]
-        public static bool TryExtractTextReferences(this GameObject prefab, Text text, IEnumerable<MonoBehaviour> monoBehaviourToCheck, out List<MonoBehaviour> textReferences)
-        {
-            textReferences = new List<MonoBehaviour>();
-            foreach (MonoBehaviour mono in monoBehaviourToCheck)
-            {
-                if (mono.IsReferencingComponent(text, out string fieldName))
-                {
-                    textReferences.Add(mono);
-                }
-            }
+        // //TODO remove this one
+        // [Obsolete]
+        // public static bool TryExtractTextReferences(this GameObject prefab, Text text, IEnumerable<MonoBehaviour> monoBehaviourToCheck, out List<MonoBehaviour> textReferences)
+        // {
+        //     textReferences = new List<MonoBehaviour>();
+        //     foreach (MonoBehaviour mono in monoBehaviourToCheck)
+        //     {
+        //         if (mono.IsReferencingComponent<T>(text, out string fieldName))
+        //         {
+        //             textReferences.Add(mono);
+        //         }
+        //     }
 
-            return textReferences.Count > 0;
-        }
+        //     return textReferences.Count > 0;
+        // }
 
         #endregion // PUBLIC
 
         #region PRIVATE
 
-        public static bool IsReferencingComponent(this Component thisComponent, Component anotherComponent, out string referencingFieldName)
+        public static bool IsReferencingComponentOfType<T>(this Component thisComponent, Component anotherComponent, out string referencingFieldName)
+            where T : Component
         {
             referencingFieldName = null;
-            
-            FieldInfo[] fields = thisComponent.GetType().GetFields(FIELD_SEARCH_FLAGS);
 
-            foreach (FieldInfo field in fields)
-            {
-                if (IsFieldReferencingComponent(thisComponent, field, anotherComponent))
+            string wat = null;
+
+            IterateOverFieldsOfType<T>(thisComponent, onMatchingField: (fieldInfo, component) => {
+                if (IsFieldReferencingComponent(thisComponent, fieldInfo, anotherComponent))
                 {
-                    referencingFieldName = field.Name;
-                    return true;
+                    wat = fieldInfo.Name;
                 }
-            }
+            }, includeParnetMonoFields: true);
 
-            return false;
+            if (wat != null)
+            {
+                referencingFieldName = wat;
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+            
+            // FieldInfo[] fields = thisComponent.GetType().GetFields(FIELD_SEARCH_FLAGS);
+
+            // foreach (FieldInfo field in fields)
+            // {
+            //     if (IsFieldReferencingComponent(thisComponent, field, anotherComponent))
+            //     {
+            //         referencingFieldName = field.Name;
+            //         return true;
+            //     }
+            // }
+
+            // return false;
         }
 
         //TODO Replace with Iterate above
-        private static bool IsFieldReferencingComponent<T>(T instance, FieldInfo field, T component) where T : Component
+        private static bool IsFieldReferencingComponent<T>(T fieldOwner, FieldInfo field, T component) where T : Component
         {
             _ = component != null ? component : throw new ArgumentNullException(nameof(component));
-            _ = instance != null ? instance : throw new ArgumentNullException(nameof(instance));
+            _ = fieldOwner != null ? fieldOwner : throw new ArgumentNullException(nameof(fieldOwner));
             _ = field ?? throw new ArgumentNullException(nameof(field));
 
             if (field.FieldType.IsArray)
             {
-                Array arr = field.GetValue(instance) as Array;
+                Array arr = field.GetValue(fieldOwner) as Array;
 
                 if (arr == null)
                 {
-                    Debug.LogError($"array null {field} for {instance.GetType()}");
+                    Debug.LogError($"array null {field} for {fieldOwner.GetType()}");
                     return false;
                 }
 
@@ -217,7 +249,7 @@ namespace FabulousReplacer
             else if (field.FieldType.IsGenericType && field.FieldType.GetGenericTypeDefinition() == typeof(List<T>))
             {
                 // todo Really doubting if this would work, not sure either if we have some lists of Text component
-                List<T> list = field.GetValue(instance) as List<T>;
+                List<T> list = field.GetValue(fieldOwner) as List<T>;
 
                 if (list == null) return false;
 
@@ -233,7 +265,7 @@ namespace FabulousReplacer
             {
                 if (field.FieldType == component.GetType())
                 {
-                    var o = field.GetValue(instance) as T;
+                    var o = field.GetValue(fieldOwner) as T;
                     if (o == component) return true;
                 }
             }

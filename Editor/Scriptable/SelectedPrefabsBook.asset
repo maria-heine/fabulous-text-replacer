@@ -12,4 +12,5 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8b4771a92252e5f4cbaa46f3a67238b5, type: 3}
   m_Name: SelectedPrefabsBook
   m_EditorClassIdentifier: 
-  SelectedPrefabs: []
+  SelectedPrefabs:
+  - {fileID: 6246038168507869520, guid: 2776a10c8d720bd4fb847cfa2e752d9e, type: 3}
