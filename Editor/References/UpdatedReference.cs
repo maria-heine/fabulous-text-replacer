@@ -24,6 +24,8 @@ namespace FabulousReplacer
     {
         // todo solve the problem of one to many references for a text and monobehaviours
         [SerializeField] string rootPrefabName; // just for inspector display puroses
+        [SerializeField] string monoParentName;
+        [SerializeField] string originalTextContent;
         public bool isReferenced;
         public GameObject rootPrefab; 
         public string prefabPath;
@@ -104,27 +106,28 @@ namespace FabulousReplacer
 
         public UpdatedReference(GameObject rootPrefab, Text unreferencedText)
         {
-            rootPrefabName = rootPrefab.gameObject.name;
-            prefabPath = AssetDatabase.GetAssetPath(rootPrefab);
-            textInformation = new TextInformation(unreferencedText);
-            this.rootPrefab = rootPrefab;
-            this.originalText = unreferencedText;
-            TextAddress = GetComponentAddressInHierarchy(rootPrefab, unreferencedText);
+            SaveBaseData(rootPrefab, unreferencedText);
             isReferenced = false;
         }
 
         public UpdatedReference(GameObject referencingPrefab, Text referencedText, MonoBehaviour referencingMono, string fieldName)
         {
-            rootPrefabName = referencingPrefab.gameObject.name;
-            prefabPath = AssetDatabase.GetAssetPath(referencingPrefab);
-            textInformation = new TextInformation(referencedText);
-            this.rootPrefab = referencingPrefab;
-            this.originalText = referencedText;
-            TextAddress = GetComponentAddressInHierarchy(referencingPrefab, referencedText);
+            SaveBaseData(referencingPrefab, referencedText);
             isReferenced = true;
-            
+            monoParentName = referencingMono.gameObject.name;
             GetFieldReferencingType(referencingMono, fieldName);
             MonoAddress = GetComponentAddressInHierarchy(referencingPrefab, referencingMono);
+        }
+
+        private void SaveBaseData(GameObject rootPrefab, Text originalText)
+        {
+            rootPrefabName = rootPrefab.gameObject.name;
+            prefabPath = AssetDatabase.GetAssetPath(rootPrefab);
+            textInformation = new TextInformation(originalText);
+            this.rootPrefab = rootPrefab;
+            this.originalText = originalText;
+            this.originalTextContent = originalText.text;
+            TextAddress = GetComponentAddressInHierarchy(rootPrefab, originalText);
         }
 
         private void GetFieldReferencingType(MonoBehaviour mono, string fieldName)

@@ -767,8 +767,16 @@ namespace FabulousReplacer
 
             foreach (MonoBehaviour mono in monoBehaviours)
             {
+                if (mono.GetType().Name.Contains("ChatButton"))
+                {
+                    Debug.Log($"mono: {mono} text: {textComponent.text}");
+                }
                 if (mono.IsReferencingComponent(anotherComponent: textComponent, out string fieldName))
                 {
+                    if (mono.GetType().Name.Contains("ChatButton"))
+                    {
+                    Debug.Log($"saved!");
+                    }
                     //! should be original prefab instead
                     updatedReferences.Add(new UpdatedReference(parentPrefab, textComponent, mono, fieldName));
                     _replaceCounter.updatedTextComponentReferencesCount++;
