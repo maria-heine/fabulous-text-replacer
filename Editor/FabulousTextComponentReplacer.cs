@@ -39,6 +39,7 @@ namespace FabulousReplacer
         Box _boxDisplayer;
         IntegerField _lowRange;
         IntegerField _highRange;
+        ObjectField _selectedPrefabsField;
 
         Action UpgradeProgressBar;
 
@@ -103,7 +104,7 @@ namespace FabulousReplacer
             _boxDisplayer = new Box();
             dataBox.Add(_boxDisplayer);
 
-            DrawReplacerButtons(menuBox);
+            DrawReplacerMenu(menuBox);
             DrawLoggingButtons(menuBox);
             DrawProgressStatus(menuBox);
         }
@@ -115,7 +116,7 @@ namespace FabulousReplacer
         //
         #region Initialization
 
-        private void DrawReplacerButtons(VisualElement root)
+        private void DrawReplacerMenu(VisualElement root)
         {
             var container = new Box();
             root.Add(container);
@@ -123,12 +124,18 @@ namespace FabulousReplacer
             var label = new Label() { text = "Replacer" };
             container.Add(label);
 
+            _selectedPrefabsField = new ObjectField("Selected prefabs")
+            {
+                objectType = typeof(SelectedPrefabsBook)
+            };
+            container.Add(_selectedPrefabsField);
+
             Button initializeButton = new Button(() =>
             {
                 //* Where to search for prefabs (depending on whether we make a backup or not)
                 // ! Prefab backup abandoned
                 UpdatedReferenceAddressBook.ClearAddressBook();
-                LoadAllPrefabs();
+                LoadPrefabs();
                 FindCrossPrefabReferences();
                 FindScriptReferences();
                 UpgradeProgressBar.Invoke();
@@ -242,6 +249,77 @@ namespace FabulousReplacer
             };
         }
 
+        //
+        // ─── PREFAB LOADING ─────────────────────────────────────
+        //
+
+        #region PREFAB LOADING
+
+        private void LoadPrefabs()
+        {
+            _loadedPrefabs = new List<GameObject>();
+            _replaceCounter = new ReplaceCounter();
+
+            string[] assetPaths = null;
+
+            if (_selectedPrefabsField.value != null)
+            {
+                assetPaths = GetSelectedAssetPaths();
+            }
+            else
+            {
+                LoadAllPrefabs();
+            }
+
+            LoadSelectedAssets(assetPaths);
+        }
+
+        private void LoadSelectedAssets(string[] assetPath)
+        {
+            for (int i = 0; i < assetPath.Length; i++)
+            {
+                if (CheckAgainstExcludedPaths(assetPath[i]))
+                {
+                    continue;
+                }
+
+                UnityEngine.Object topAsset = AssetDatabase.LoadAssetAtPath(assetPath[i], typeof(Component));
+
+                try
+                {
+                    // Since only prefabs in assets will have a component as it's root
+                    if (topAsset is Component c)
+                    {
+                        bool hasMonobehaviour = c.GetComponentInChildren<MonoBehaviour>(includeInactive: true) != null;
+                        bool hasRectTransform = c.GetComponentInChildren<RectTransform>(includeInactive: true) != null;
+                        if (hasRectTransform)
+                        {
+                            _loadedPrefabs.Add(c.gameObject);
+                            // ! Counting all found text components
+                            _replaceCounter.totalTextComponentCount += c.gameObject.GetComponentsInChildren<Text>(includeInactive: true).Count();
+                        }
+                    }
+                }
+                catch (Exception)
+                {
+                    /* Because I don't care about those two unnameable ghostly objects that exist and yet they don't */
+                    Debug.Log($"Prefabl searcher exception for path: {assetPath[i]}");
+                }
+            }
+        }
+
+        private string[] GetSelectedAssetPaths()
+        {
+            SelectedPrefabsBook prefabsBook = _selectedPrefabsField.value as SelectedPrefabsBook;
+
+            string[] paths = prefabsBook.SelectedPrefabs.Select(o => AssetDatabase.GetAssetPath(o)).ToArray();
+
+            Debug.Log($"{paths[0]}");
+            
+
+            return paths;
+        }
+
         private List<string> ExcludedPaths = new List<string>()
         {
             "Assets/RemoteAssets/UI/InGame/NavigatorHUD/NavigatorHUDView.prefab",
@@ -266,9 +344,6 @@ namespace FabulousReplacer
 
         private void LoadAllPrefabs()
         {
-            _loadedPrefabs = new List<GameObject>();
-            _replaceCounter = new ReplaceCounter();
-
             /* 
             * Note: This will count both directories and script files as assets
             */
@@ -406,6 +481,8 @@ namespace FabulousReplacer
                 }
             }
         }
+
+        #endregion // Prefab Loading
 
         #endregion // Initialization
 
@@ -561,8 +638,6 @@ namespace FabulousReplacer
         //
 
         #region ANALYSIS
-
-
 
         private void AnalyzePrefab(GameObject originalPrefab, MultilineStringBuilder msb, ref int currentDepth)
         {
