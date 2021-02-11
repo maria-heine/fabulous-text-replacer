@@ -47,14 +47,27 @@ namespace FabulousReplacer
             int from = lowRange.value >= _updatedReferenceAddressBook.Count ? _updatedReferenceAddressBook.Count : lowRange.value;
             int to = highRange.value >= _updatedReferenceAddressBook.Count ? _updatedReferenceAddressBook.Count : highRange.value;
 
-            for (int i = from; i < to; i++)
+            try
             {
-                var references = _updatedReferenceAddressBook[i];
+                AssetDatabase.StartAssetEditing();
 
-                foreach (UpdatedReference reference in references)
+                for (int i = from; i < to; i++)
                 {
-                    ReplaceTextComponent(reference);
+                    var references = _updatedReferenceAddressBook[i];
+
+                    foreach (UpdatedReference reference in references)
+                    {
+                        ReplaceTextComponent(reference);
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+            finally
+            {
+                AssetDatabase.StopAssetEditing();
             }
         }
 
