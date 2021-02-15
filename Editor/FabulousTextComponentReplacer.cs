@@ -623,20 +623,14 @@ namespace FabulousReplacer
             {
                 string originalPrefabPath = AssetDatabase.GetAssetPath(originalPrefab);
 
-                // * Always add 
-                // TODO test disabled
-                // UpdatedReference unreferencedTextComponent = new UpdatedReference(originalPrefab, text);
-                // UpdatedReferenceAddressBook[originalPrefabPath].Add(unreferencedTextComponent);
-
-                // 1. Internal text component references
-                // Considering simplest case when text component is only referenced within a single prefabvb
+                //* Internal text component references
                 SaveTextReferences(originalPrefabPath, originalPrefab, text);
 
                 // 2. Text components referenced by nested prefabs
                 // 3. Text components of prefabs that are reference by the other nested prefabs
                 // X???. Text components of prefabs that are referenced by parent of a parent OR by a nested prefab of a parent of a parent OOF
 
-                // 4. Foreign text component references
+                //* Foreign text component references
                 // Get all instances of a Text component along with the parentPrefab that is holding them
                 // It is a list of Text components because parentPrefab may hold multiple references to that Text Component
                 foreach (var kvp in GetAllTextInstances(originalPrefab, text))
@@ -715,34 +709,49 @@ namespace FabulousReplacer
 
         private void SaveTextReferences(string sourcePrefabPath, GameObject prefabParent, Text textComponent)
         {
-            // Separately add each text component as unreferenced version
-            UpdatedReference unreferencedTextComponent = new UpdatedReference(prefabParent, textComponent);
+            //* 1. Separately add each text component as unreferenced version of replace unit
+            // ? This is quite a dirty trick, I'm sorry, more about it in ReplaceUnit
+            ReplaceUnit unreferencedTextComponent = new ReplaceUnit(prefabParent, textComponent);
             UpdatedReferenceAddressBook[sourcePrefabPath].Add(unreferencedTextComponent);
 
+            //* 2. Add all referenced versions of replace unit
             var updatedReferences = CheckTextAgainstFoundMonobehaviours(textComponent, prefabParent);
-
-            foreach (UpdatedReference updatedReference in updatedReferences)
+            foreach (ReplaceUnit updatedReference in updatedReferences)
             {
                 UpdatedReferenceAddressBook[sourcePrefabPath].Add(updatedReference);
             }
         }
 
-        private List<UpdatedReference> CheckTextAgainstFoundMonobehaviours(Text textComponent, GameObject parentPrefab)
+        /// <summary>
+        /// * Gathering of all REFERENCED replace units for a given Text component
+        /// * in other words: gathering information about all references to a text component withing all monobehaviours belinging to
+        /// </summary>
+        /// <param name="textComponent">the text component that we want to find all references to</param>
+        /// <param name="parentPrefab">the root prefab containing that text component within whose scope we want to search for the references</param>
+        /// <returns>Returns all referenced Replace Units with respect to provided textComponent</returns>
+        private List<ReplaceUnit> CheckTextAgainstFoundMonobehaviours(Text textComponent, GameObject parentPrefab)
         {
+
             List<MonoBehaviour> monoBehaviours = _customMonobehavioursByPrefab[parentPrefab];
-            List<UpdatedReference> updatedReferences = new List<UpdatedReference>(monoBehaviours.Count);
+            List<ReplaceUnit> updatedReferences = new List<ReplaceUnit>(monoBehaviours.Count);
+
+            Debug.Log($"<color=yellow>{parentPrefab} {textComponent}</color>");
 
             foreach (MonoBehaviour mono in monoBehaviours)
             {
-                if (mono.IsReferencingComponentOfType<Text>(anotherComponent: textComponent, out string fieldName))
+                Debug.Log($"<color=cyan>{mono}</color>");
+                FieldInformation fieldInformation = null;
+
+                if (mono.IsReferencingComponentOfType<Text>(textComponent, ref fieldInformation))
                 {
-                    if (mono.GetType().Name.Contains("ChatButton"))
-                    {
-                    Debug.Log($"saved!");
-                    }
-                    //! should be original prefab instead
-                    updatedReferences.Add(new UpdatedReference(parentPrefab, textComponent, mono, fieldName));
+                    updatedReferences.Add(new ReplaceUnit(parentPrefab, textComponent, mono, fieldInformation));
                     _replaceCounter.updatedTextComponentReferencesCount++;
+                    // Debug.Log($"<color=yellow>Yas found something</color>");
+
+                }
+                else
+                {
+                    Debug.Log($"nope! {mono} does not refer the {textComponent}");
                 }
             }
 

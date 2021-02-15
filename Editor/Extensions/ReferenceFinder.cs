@@ -11,60 +11,89 @@ namespace FabulousReplacer
     public static class ReferenceFinder
     {
         // TODO This really requires checking whether we are getting everything we want.
-        public const BindingFlags FIELD_SEARCH_FLAGS = BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static;
+        public const BindingFlags FIELD_SEARCH_FLAGS = BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance;
 
         #region PRIVATE
 
-        private static void IterateOverFieldsOfType<T>(Component owner, Action<FieldInfo, T> onMatchingField, bool includeParnetMonoFields = false)
+        private static void IterateOverFieldsOfType<T>(
+            object owner,
+            Func<object, FieldInfo, T, bool> onTypeMatchingField,
+            Func<object, FieldInfo, bool> onCustomClass,
+            bool includeParnetMonoFields = false)
             where T : Component
         {
             Type ownerType = owner.GetType();
 
-            List<FieldInfo> fields = ownerType.GetFields(FIELD_SEARCH_FLAGS).ToList();
+            List<FieldInfo> fields = ownerType.GetFields(FIELD_SEARCH_FLAGS | BindingFlags.DeclaredOnly).ToList();
 
             if (includeParnetMonoFields)
             {
                 while (ownerType.BaseType != null)
                 {
                     ownerType = ownerType.BaseType;
-                    fields.AddRange(ownerType.GetFields(FIELD_SEARCH_FLAGS));
+                    fields.AddRange(ownerType.GetFields(FIELD_SEARCH_FLAGS | BindingFlags.DeclaredOnly));
                 }
             }
 
-            fields.ToArray().ExecuteOnAllFieldsOfType<T>(owner, onMatchingField);
+            if (fields.Count == 0) return;
+
+            fields.ToArray().ExecuteOnAllFieldsOfType<T>(owner, onTypeMatchingField, onCustomClass);
         }
 
-        private static void ExecuteOnAllFieldsOfType<T>(this FieldInfo[] fields, Component owner, Action<FieldInfo, T> onEachField)
+        private static void ExecuteOnAllFieldsOfType<T>(
+            this FieldInfo[] fields,
+            object owner,
+            Func<object, FieldInfo, T, bool> onTypeMatchingField,
+            Func<object, FieldInfo, bool> onCustomClass)
+            where T : Component
         {
             foreach (FieldInfo field in fields)
             {
                 if (field.FieldType.IsArray)
                 {
-                    Array arr = field.GetValue(owner) as Array;
-
-                    if (arr == null) continue;
-
-                    foreach (object obj in arr)
+                    if (field.FieldType.GetElementType() == typeof(T))
                     {
-                        if (obj is T objT)
+                        Array arr = field.GetValue(owner) as Array;
+
+                        if (arr == null) continue;
+
+                        foreach (T obj in arr)
                         {
-                            onEachField.Invoke(field, objT);
+                            if (onTypeMatchingField(owner, field, obj))
+                            {
+                                return;
+                            }
                         }
                     }
                 }
-                else if (field.FieldType.IsGenericType && field.FieldType.GetGenericTypeDefinition() == typeof(List<T>))
+                else if (field.FieldType.IsGenericType && field.FieldType.GetGenericTypeDefinition() == typeof(List<>))
                 {
-                    // Debug.Log($"Found a list for {mono}, field {field.Name}");
-
-                    List<T> list = field.GetValue(owner) as List<T>;
-
-                    if (list == null) continue;
-
-                    foreach (T obj in list)
+                    if (field.FieldType.GenericTypeArguments.Single() == typeof(T))
                     {
-                        if (obj.GetType() == typeof(T))
+                        List<T> list = field.GetValue(owner) as List<T>;
+
+                        if (list == null) continue;
+
+                        foreach (T obj in list)
                         {
-                            onEachField.Invoke(field, obj);
+                            if (onTypeMatchingField(owner, field, obj))
+                            {
+                                return;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        IEnumerable enumerable = (IEnumerable)field.GetValue(owner);
+
+                        // Debug.Log($"<color=cyan>{enumerable} \n</color>");
+
+                        foreach (var item in enumerable)
+                        {
+                            if (onCustomClass(item, field))
+                            {
+                                return;
+                            }
                         }
                     }
                 }
@@ -76,39 +105,30 @@ namespace FabulousReplacer
 
                         if (obj != null)
                         {
-                            onEachField.Invoke(field, obj);
+                            if (onTypeMatchingField(owner, field, obj))
+                            {
+                                return;
+                            }
+                        }
+                    }
+                    else if (!field.FieldType.IsPrimitive && field.FieldType != typeof(string) && field.FieldType != typeof(object))
+                    {
+                        //* Here we are checking if the field is a custom class
+                        // Debug.Log($"<color=cyan>Custom class encountered: {field.FieldType}</color>");
+
+                        var newOwner = field.GetValue(owner);
+
+                        if (onCustomClass(newOwner, field))
+                        {
+                            return;
                         }
                     }
                 }
             }
         }
-        #endregion
+        #endregion // PRIVATE
 
         #region PUBLIC
-
-        public static string GetFieldNameForAComponent<T>(this T component, MonoBehaviour owner)
-            where T : Component
-        {
-            FieldInfo[] fields = owner.GetType().GetFields(FIELD_SEARCH_FLAGS);
-
-            string fieldName = null;
-
-            fields.ExecuteOnAllFieldsOfType<T>(owner, (field, value) =>
-            {
-                if (value == component)
-                {
-                    fieldName = field.Name;
-                }
-            });
-
-            if (fieldName is null)
-            {
-                Debug.LogError($"Failed to find a field name for component {component} at {owner}");
-            }
-
-            return fieldName;
-        }
-
 
         public static bool TryGetAllFieldsOfType<T>(this MonoBehaviour mono, out List<FieldInfo> foundTFields)
             where T : Component
@@ -161,118 +181,108 @@ namespace FabulousReplacer
 
             return foundTFields.Count > 0;
         }
-        
-        // //TODO remove this one
-        // [Obsolete]
-        // public static bool TryExtractTextReferences(this GameObject prefab, Text text, IEnumerable<MonoBehaviour> monoBehaviourToCheck, out List<MonoBehaviour> textReferences)
-        // {
-        //     textReferences = new List<MonoBehaviour>();
-        //     foreach (MonoBehaviour mono in monoBehaviourToCheck)
-        //     {
-        //         if (mono.IsReferencingComponent<T>(text, out string fieldName))
-        //         {
-        //             textReferences.Add(mono);
-        //         }
-        //     }
 
-        //     return textReferences.Count > 0;
-        // }
-
-        #endregion // PUBLIC
-
-        #region PRIVATE
-
-        public static bool IsReferencingComponentOfType<T>(this Component thisComponent, Component anotherComponent, out string referencingFieldName)
+        public static bool IsReferencingComponentOfType<T>(this object someObject, T component, ref FieldInformation referencedFieldInformation)
             where T : Component
         {
-            referencingFieldName = null;
+            FieldInformation fieldInformation = referencedFieldInformation;
 
-            string wat = null;
-
-            IterateOverFieldsOfType<T>(thisComponent, onMatchingField: (fieldInfo, component) => {
-                if (IsFieldReferencingComponent(thisComponent, fieldInfo, anotherComponent))
+            IterateOverFieldsOfType<T>(
+                owner: someObject,
+                onTypeMatchingField: (fieldOwner, fieldInfo, fieldValue) =>
                 {
-                    wat = fieldInfo.Name;
-                }
-            }, includeParnetMonoFields: true);
+                    if (fieldValue == component)
+                    {
+                        Type fieldOwnerType = fieldOwner.GetType();
 
-            if (wat != null)
+                        fieldInformation = new FieldInformation(fieldOwnerType);
+
+                        fieldInformation.TextFieldName = fieldInfo.Name;
+                        fieldInformation.FieldType = FieldType.Direct;
+
+                        if (fieldInfo.FieldType.IsGenericType)
+                        {
+                            if (fieldInfo.FieldType.GetGenericTypeDefinition() == typeof(List<>))
+                            {
+                                //* This means text field is hidden within a list
+                                fieldInformation.FieldType = fieldInformation.FieldType | FieldType.Listed;
+                                Debug.Log($"<color=magenta>A listed field {fieldInformation.FieldType} {fieldInfo.Name} {fieldOwner.GetType()}</color>");
+                            }
+                        }
+                        else if (fieldInfo.FieldType.IsArray)
+                        {
+                            //* This means text field is hidden within an array
+                            fieldInformation.FieldType = fieldInformation.FieldType | FieldType.Arrayed;
+                            Debug.Log($"<color=BF55CB>ARRAY! {fieldInformation.FieldType} {fieldInfo.Name} {fieldOwner.GetType()}</color>");
+                        }
+
+                        return true;
+                    }
+                    else return false;
+                },
+                onCustomClass: (fieldOwner, fieldInfo) =>
+                {
+                    // TODO BUUUUG HEREEEEEEE
+                    // ADDS MULTIPLE TIMES IN CASE OF CUSTOM ARRAY
+                    // fieldInformation = null;
+                    //! follow the white rabbit
+                    if (fieldOwner.IsReferencingComponentOfType(component, ref fieldInformation))
+                    {
+                        ExternallyOwnedFieldInformation externallyOwnedFieldInformation = new ExternallyOwnedFieldInformation();
+                        externallyOwnedFieldInformation.ExternalOwnerFieldName = fieldInfo.Name;
+
+                        //! Note that this might be a problem in case of inherited fields, check it
+                        externallyOwnedFieldInformation.ExternalOwnerType = someObject.GetType();
+                        externallyOwnedFieldInformation.ExternalOwnerAssemblyName = someObject.GetType().AssemblyQualifiedName;
+                        externallyOwnedFieldInformation.UpdatePreview();
+                        fieldInformation.AddFieldInformationParameter(externallyOwnedFieldInformation);
+
+                        FieldType fieldType;
+
+                        if (fieldOwner.GetType().IsNested)
+                        {
+                            //* This means a nested class
+                            fieldType = FieldType.Nested;
+                        }
+                        else
+                        {
+                            //* This means an external class is a field that holds reference to the text component
+                            fieldType = FieldType.External;
+                        }
+
+                        if (fieldInfo.FieldType.IsGenericType)
+                        {
+                            if (fieldInfo.FieldType.GetGenericTypeDefinition() == typeof(List<>))
+                            {
+                                //* This means text field is hidden within a list
+                                fieldType |= FieldType.Listed;
+                            }
+                        }
+                        else if (fieldInfo.FieldType.IsArray)
+                        {
+                            //* This means text field is hidden within an array
+                            fieldType |= FieldType.Arrayed;
+                        }
+
+                        fieldInformation.FieldType = fieldType;
+
+                        return true;
+                    }
+                    else return false;
+                },
+                includeParnetMonoFields: true);
+
+            if (fieldInformation != null)
             {
-                referencingFieldName = wat;
+                referencedFieldInformation = fieldInformation;
                 return true;
             }
             else
             {
                 return false;
             }
-            
-            // FieldInfo[] fields = thisComponent.GetType().GetFields(FIELD_SEARCH_FLAGS);
-
-            // foreach (FieldInfo field in fields)
-            // {
-            //     if (IsFieldReferencingComponent(thisComponent, field, anotherComponent))
-            //     {
-            //         referencingFieldName = field.Name;
-            //         return true;
-            //     }
-            // }
-
-            // return false;
         }
 
-        //TODO Replace with Iterate above
-        private static bool IsFieldReferencingComponent<T>(T fieldOwner, FieldInfo field, T component) where T : Component
-        {
-            _ = component != null ? component : throw new ArgumentNullException(nameof(component));
-            _ = fieldOwner != null ? fieldOwner : throw new ArgumentNullException(nameof(fieldOwner));
-            _ = field ?? throw new ArgumentNullException(nameof(field));
-
-            if (field.FieldType.IsArray)
-            {
-                Array arr = field.GetValue(fieldOwner) as Array;
-
-                if (arr == null)
-                {
-                    Debug.LogError($"array null {field} for {fieldOwner.GetType()}");
-                    return false;
-                }
-
-                foreach (object obj in arr)
-                {
-                    if (obj != null && component != null && obj.GetType() == component.GetType())
-                    {
-                        var o = obj as T;
-                        if (o == component) return true;
-                    }
-                }
-            }
-            else if (field.FieldType.IsGenericType && field.FieldType.GetGenericTypeDefinition() == typeof(List<T>))
-            {
-                // todo Really doubting if this would work, not sure either if we have some lists of Text component
-                List<T> list = field.GetValue(fieldOwner) as List<T>;
-
-                if (list == null) return false;
-
-                foreach (T obj in list)
-                {
-                    if (obj != null && component != null && obj.GetType() == component.GetType())
-                    {
-                        if (obj == component) return true;
-                    }
-                }
-            }
-            else if (field.FieldType.IsClass)
-            {
-                if (field.FieldType == component.GetType())
-                {
-                    var o = field.GetValue(fieldOwner) as T;
-                    if (o == component) return true;
-                }
-            }
-
-            return false;
-        }
-
-        #endregion // PRIVATE 
+        #endregion // PUBLIC
     }
 }

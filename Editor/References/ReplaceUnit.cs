@@ -7,6 +7,7 @@ using static FabulousReplacer.FabulousExtensions;
 
 namespace FabulousReplacer
 {
+
     /*
     It was important to know that the:
     https://docs.unity3d.com/Manual/script-Serialization.html
@@ -18,21 +19,34 @@ namespace FabulousReplacer
     using that weird "address" thing is illegal aswell. This is because after the scripts
     are edited and reimported these references would point to some arbitrary "floating objects" 
     that are no longer directly connected to the prefabs they were created from. 
+
+    TODO Also naming for the class is terrible, more like ReplaceUnit
+
+    * Depending whether the text component is referenced by scripts or not different fields will be null.
+    * This is far from a clear code structure unfrortunately. 
+
     */
-    [System.Serializable]
-    public class UpdatedReference
+    [Serializable]
+    public class ReplaceUnit
     {
         // todo solve the problem of one to many references for a text and monobehaviours
         [SerializeField] string rootPrefabName; // just for inspector display puroses
         [SerializeField] string monoParentName;
         [SerializeField] string originalTextContent;
         public bool isReferenced;
-        public GameObject rootPrefab; 
+        public GameObject rootPrefab;
         public string prefabPath;
         public string fieldName;
         public string monoAssemblyName;
         public Text originalText;
         public TextInformation textInformation;
+        public FieldInformation fieldInformation;
+
+        //
+        // ─── ADDRESSING ──────────────────────────────────────────────────
+        //
+
+        #region Addressing
 
         [SerializeField] List<int> monoAddress;
         public Stack<int> MonoAddress
@@ -78,7 +92,12 @@ namespace FabulousReplacer
             }
         }
 
+        #endregion // Addressing
+
         [SerializeField] Type monoType;
+
+        //! OBSOLETE
+        [Obsolete]
         public Type MonoType
         {
             get
@@ -104,20 +123,45 @@ namespace FabulousReplacer
             }
         }
 
-        public UpdatedReference(GameObject rootPrefab, Text unreferencedText)
+        //
+        // ─── CONSTRUCTORS ────────────────────────────────────────────────
+        //
+
+        #region Constructors
+
+        public ReplaceUnit(GameObject rootPrefab, Text unreferencedText)
         {
             SaveBaseData(rootPrefab, unreferencedText);
             isReferenced = false;
         }
 
-        public UpdatedReference(GameObject referencingPrefab, Text referencedText, MonoBehaviour referencingMono, string fieldName)
+        // public ReplaceUnit(GameObject referencingPrefab, Text referencedText, MonoBehaviour referencingMono, string fieldName)
+        // {
+        //     SaveBaseData(referencingPrefab, referencedText);
+        //     isReferenced = true;
+
+        //     monoParentName = referencingMono.gameObject.name;
+        //     GetFieldReferencingType(referencingMono, fieldName);
+        //     MonoAddress = GetComponentAddressInHierarchy(referencingPrefab, referencingMono);
+        // }
+
+        public ReplaceUnit(GameObject referencingPrefab, Text referencedText, MonoBehaviour referencingMono, FieldInformation fieldInformation)
         {
             SaveBaseData(referencingPrefab, referencedText);
             isReferenced = true;
+
+            this.fieldInformation = fieldInformation;
+
             monoParentName = referencingMono.gameObject.name;
-            GetFieldReferencingType(referencingMono, fieldName);
+            //TODO Check this!
+            
+            //! MOVED THIS
+            // GetFieldReferencingType(referencingMono, fieldInformation.TextFieldName);
+
             MonoAddress = GetComponentAddressInHierarchy(referencingPrefab, referencingMono);
         }
+
+        #endregion // Constructors
 
         private void SaveBaseData(GameObject rootPrefab, Text originalText)
         {
@@ -130,6 +174,7 @@ namespace FabulousReplacer
             TextAddress = GetComponentAddressInHierarchy(rootPrefab, originalText);
         }
 
+        //! THAT WILL BE GLITCHED TOO
         private void GetFieldReferencingType(MonoBehaviour mono, string fieldName)
         {
             this.MonoType = GetFieldDeclaringType(mono.GetType(), fieldName);

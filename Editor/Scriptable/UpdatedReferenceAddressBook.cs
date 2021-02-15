@@ -8,19 +8,19 @@ namespace FabulousReplacer
 {
     [CreateAssetMenu(fileName = "UpdatedReferenceAddressBook", menuName = "FabulousReplacer/UpdatedReferenceAddressBook")]
     [System.Serializable]
-    public class UpdatedReferenceAddressBook : ScriptableObject, IEnumerable<KeyValuePair<string, List<UpdatedReference>>>
+    public class UpdatedReferenceAddressBook : ScriptableObject, IEnumerable<KeyValuePair<string, List<ReplaceUnit>>>
     {
         // * Stoopid Unity still doesnt serialize dictionaries 
         [System.Serializable]
         private class FakeDictionary
         {
             public string prefabPath;
-            public List<UpdatedReference> updatedReferences;
+            public List<ReplaceUnit> updatedReferences;
 
             public FakeDictionary(string prefabPath)
             {
                 this.prefabPath = prefabPath;
-                updatedReferences = new List<UpdatedReference>();
+                updatedReferences = new List<ReplaceUnit>();
             }
         }
         
@@ -42,7 +42,7 @@ namespace FabulousReplacer
 
         public int Count => Paths.Length; 
 
-        public List<UpdatedReference> this[string prefabPath]
+        public List<ReplaceUnit> this[string prefabPath]
         {
             get
             {
@@ -67,11 +67,11 @@ namespace FabulousReplacer
             }
         }
 
-        public IEnumerable<UpdatedReference> this[int i]
+        public IEnumerable<ReplaceUnit> this[int i]
         {
             get
             {
-                List<UpdatedReference> references = new List<UpdatedReference>();
+                List<ReplaceUnit> references = new List<ReplaceUnit>();
                return fakePrefabsUpdatedReferences
                     .Where(y => y.prefabPath == Paths[i])
                     .SelectMany(x => x.updatedReferences);
@@ -89,13 +89,13 @@ namespace FabulousReplacer
         //
 
         // public IEnumerator<KeyValuePair<string, List<UpdatedReference>>> GetEnumerator()
-        public IEnumerator<KeyValuePair<string, List<UpdatedReference>>> GetEnumerator()
+        public IEnumerator<KeyValuePair<string, List<ReplaceUnit>>> GetEnumerator()
         {
             foreach (FakeDictionary entry in fakePrefabsUpdatedReferences)
             {
                 string key = entry.prefabPath;        
-                List<UpdatedReference> value = entry.updatedReferences;           
-                yield return new KeyValuePair<string, List<UpdatedReference>>(key, value);
+                List<ReplaceUnit> value = entry.updatedReferences;           
+                yield return new KeyValuePair<string, List<ReplaceUnit>>(key, value);
             }
         }
 

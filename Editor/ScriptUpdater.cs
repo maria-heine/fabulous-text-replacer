@@ -24,6 +24,7 @@ namespace FabulousReplacer
 
         UpdatedReferenceAddressBook _updatedReferenceAddressBook;
         Dictionary<Type, List<string>> _updatedMonoFields;
+        Dictionary<Type, List<FieldInformation>> _fieldsToUpdateByType;
         IntegerField lowRange;
         IntegerField highRange;
 
@@ -50,9 +51,9 @@ namespace FabulousReplacer
             {
                 var references = _updatedReferenceAddressBook[i];
 
-                foreach (UpdatedReference reference in references)
+                foreach (ReplaceUnit reference in references)
                 {
-                    GatherMono(reference);
+                    GatherFieldsToUpdate(reference);
                 }
             }
 
@@ -79,23 +80,24 @@ namespace FabulousReplacer
 
         #region SCRIPT REPLACEMENT 
 
-        private void GatherMono(UpdatedReference reference)
+        private void GatherFieldsToUpdate(ReplaceUnit reference)
         {
             if (reference.isReferenced)
             {
-                Type monoType = reference.MonoType;
+                // TODO this should use FieldInformation instead
+                Type scriptType = reference.MonoType;
                 string fieldName = reference.fieldName;
 
-                if (_updatedMonoFields.ContainsKey(monoType) && _updatedMonoFields[monoType].Contains(fieldName))
+                if (_updatedMonoFields.ContainsKey(scriptType) && _updatedMonoFields[scriptType].Contains(fieldName))
                 {
                     return;
                 }
-                else if (!_updatedMonoFields.ContainsKey(monoType))
+                else if (!_updatedMonoFields.ContainsKey(scriptType))
                 {
-                    _updatedMonoFields[monoType] = new List<string>();
+                    _updatedMonoFields[scriptType] = new List<string>();
                 }
 
-                _updatedMonoFields[monoType].Add(fieldName);
+                _updatedMonoFields[scriptType].Add(fieldName);
             }
         }
 
@@ -106,36 +108,79 @@ namespace FabulousReplacer
                 Type monoType = item.Key;
                 List<string> fieldNames = item.Value;
 
-                string scriptFileName = monoType.Name;
-                string[] assets = AssetDatabase.FindAssets($"{scriptFileName} t:MonoScript");
-
-                string selectedAsset = null;
-
-                if (assets.Length != 1)
-                {
-                    foreach (string asset in assets)
-                    {
-                        string assetPath = AssetDatabase.GUIDToAssetPath(asset);
-
-                        if (assetPath.Contains($"{scriptFileName}.cs"))
-                        {
-                            selectedAsset = asset;
-                            Debug.Log($"From overlapping selections chose: {assetPath}");
-                        }
-                    }
-                }
-                else
-                {
-                    selectedAsset = assets[0];
-                }
-
-                var path = AssetDatabase.GUIDToAssetPath(selectedAsset);
+                string path = GetScriptFilePath(monoType);
 
                 List<string> scriptLines = GetUpdatedScriptLines(path, monoType, fieldNames);
 
                 SaveUpdateScript(path, scriptLines);
             }
         }
+
+        /* 
+        * This method can only work guaranteed the script files follow convention of being named the
+        * same as the class they contain.
+        TODO Something should be done about the possibility of partial classes
+        TODO Apparently not much can be done:
+        https://stackoverflow.com/questions/10960071/how-to-find-path-to-cs-file-by-its-type-in-c-sharp
+        */ 
+        private static string GetScriptFilePath(Type monoType)
+        {
+            string scriptFileName = monoType.Name;
+            string[] assets = AssetDatabase.FindAssets($"{scriptFileName} t:MonoScript");
+
+            string selectedAsset = null;
+
+            if (assets.Length != 1)
+            {
+                foreach (string asset in assets)
+                {
+                    string assetPath = AssetDatabase.GUIDToAssetPath(asset);
+
+                    if (assetPath.Contains($"{scriptFileName}.cs"))
+                    {
+                        selectedAsset = asset;
+                        Debug.Log($"From overlapping selections chose: {assetPath}");
+                    }
+                }
+            }
+            else
+            {
+                selectedAsset = assets[0];
+            }
+
+            var path = AssetDatabase.GUIDToAssetPath(selectedAsset);
+            return path;
+        }
+
+        // TODO not finished
+        private static Regex GetClassRx(FieldInformation fieldInformation)
+        {
+            string classPattern = null;
+            FieldType fieldType = fieldInformation.FieldType;
+
+            if (fieldType.HasFlag(FieldType.Nested))
+            {
+                Regex nestedClassRx = new Regex($@"\b\+\w+\b");
+                string nestedClassName = nestedClassRx.Match(fieldInformation.FieldOwnerType.Name).Value;
+                nestedClassName = nestedClassName.TrimStart('+');
+
+                if (string.IsNullOrWhiteSpace(nestedClassName))
+                {
+                    Debug.LogError($"Failed to find nested class name for {fieldInformation.FieldOwnerType.Name}");
+                }
+                
+                Debug.Log($"<color=yellow>{nestedClassName}</color>");
+                classPattern = $@"\bclass\s+{nestedClassName}\b";
+            }
+            else
+            {
+                classPattern = $@"\bclass\s+{fieldInformation.FieldOwnerType.Name}\b";
+            }
+
+            return null;
+        }
+
+        // OuterClass+NestedClass
 
         private static List<string> GetUpdatedScriptLines(string scriptPath, Type monoType, List<string> fieldNames)
         {
@@ -148,6 +193,7 @@ namespace FabulousReplacer
                 bool foundClassDeclaration = false;
                 bool insertedReplacerCode = false;
 
+                // TODO that check shouldn't be here
                 if (scriptPath.Contains(".cs") == false)
                 {
                     Debug.LogError($"path does not point to a script file: {scriptPath}");
@@ -159,12 +205,17 @@ namespace FabulousReplacer
                 using (var reader = new StreamReader(scriptPath))
                 {
                     string line;
+                    
                     string classPattern = $@"\bclass\s+{monoType.Name}\b";
+                    Regex classRx = new Regex(classPattern); //GetClassRx() //todo requires field infomration
+
                     string classOpenPattern = @"\{";
                     string indentationPattern = @"^\s+";
                     string tmProUsingsPattern = @"using\s+TMPro;";
 
                     //TODO omg what if there is a List of Text components somewhere in zula?
+                    //* Hehe, there 'is' or rather 'are' and yes they are completely undalndled
+                    //* Just the same with nested classes
                     string fieldSearchPattern = @"(";
                     for (int i = 0; i < fieldNames.Count; i++)
                     {
@@ -173,7 +224,6 @@ namespace FabulousReplacer
                     }
                     fieldSearchPattern += ")";
 
-                    Regex classRx = new Regex(classPattern);
                     Regex classOpenRx = new Regex(classOpenPattern);
                     Regex indentRx = new Regex(indentationPattern);
                     Regex tmProUsingsRx = new Regex(tmProUsingsPattern);
@@ -181,10 +231,6 @@ namespace FabulousReplacer
 
                     while ((line = reader.ReadLine()) != null)
                     {
-                        //if (tmProUsingsRx.IsMatch(line))
-                        //{
-                        //    foundTmProUsings = true;
-                        //}
                         if (classRx.IsMatch(line))
                         {
                             foundClassDeclaration = true;
@@ -226,12 +272,6 @@ namespace FabulousReplacer
                             finalScriptLines.Add(line);
                         }
                     }
-
-                    ////TODO How the hell did that get added into a prefab file
-                    //if (foundTmProUsings == false)
-                    //{
-                    //    finalScriptLines.Insert(0, "using TMPro;");
-                    //}
                 }
             }
             catch (IOException e)

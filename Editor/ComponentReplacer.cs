@@ -55,7 +55,7 @@ namespace FabulousReplacer
                 {
                     var references = _updatedReferenceAddressBook[i];
 
-                    foreach (UpdatedReference reference in references)
+                    foreach (ReplaceUnit reference in references)
                     {
                         ReplaceTextComponent(reference);
                     }
@@ -77,7 +77,7 @@ namespace FabulousReplacer
 
         #region TEXT COMPONENT REPLACEMENT
 
-        private void ReplaceTextComponent(UpdatedReference updatedReference)
+        private void ReplaceTextComponent(ReplaceUnit updatedReference)
         {
             TextInformation textInfo = updatedReference.textInformation;
 
@@ -96,7 +96,7 @@ namespace FabulousReplacer
             }
         }
 
-        private void AssignTMProReference(UpdatedReference reference, TMProAdapter tmProAdapter, GameObject root)
+        private void AssignTMProReference(ReplaceUnit reference, TMProAdapter tmProAdapter, GameObject root)
         {
             if (reference.isReferenced)
             {
@@ -151,7 +151,7 @@ namespace FabulousReplacer
             tmProText.characterSpacing = -1.1f;
         }
 
-        private static TextMeshProUGUI GetTMProText(UpdatedReference updatedReference, TextInformation textInfo, GameObject root)
+        private static TextMeshProUGUI GetTMProText(ReplaceUnit updatedReference, TextInformation textInfo, GameObject root)
         {
             TextMeshProUGUI newText;
 
@@ -175,7 +175,7 @@ namespace FabulousReplacer
             return newText;
         }
 
-        private static TMProAdapter CreateTextAdapter(UpdatedReference updatedReference, GameObject root, TextMeshProUGUI newTextComponent)
+        private static TMProAdapter CreateTextAdapter(ReplaceUnit updatedReference, GameObject root, TextMeshProUGUI newTextComponent)
         {
             TMProAdapter adapter = null;
 
@@ -214,6 +214,7 @@ namespace FabulousReplacer
                 }
                 else
                 {
+                    //TODO add version with FieldInformation
                     adapter = adaptersParent.GetComponent<TMProAdapterParent>()[updatedReference.fieldName];
                 }
             }

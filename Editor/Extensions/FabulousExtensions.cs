@@ -13,8 +13,14 @@ namespace FabulousReplacer
     {
         // Gets the type originally declaring a given field in case 
         // the passed type is just a child inheriting that field
+        /*
+        * This thingy was necessary when some text fields were inherited
+        */
+        //! MUCH MESS HERE, FIX CLEAN
         public static Type GetFieldDeclaringType(Type type, string field)
         {
+            Type originalType = type;
+
             FieldInfo fieldInfo = type
                 .GetFields(ReferenceFinder.FIELD_SEARCH_FLAGS)
                 .Where(f => f.DeclaringType == type)
@@ -22,7 +28,7 @@ namespace FabulousReplacer
             
             if (fieldInfo == null)
             {
-                Debug.Log($"{type} didnt contain {field} definition");
+                // Debug.Log($"{type} didnt contain {field} definition");
 
                 type = type.BaseType;
 
@@ -34,6 +40,24 @@ namespace FabulousReplacer
 
                 type = GetFieldDeclaringType(type, field);
             }
+
+            // if (type == null)
+            // {
+            //     foreach (Type t in originalType.GetNestedTypes())
+            //     {
+
+            //     }
+
+            //     type = type.BaseType;
+
+            //     if (type == null)
+            //     {
+            //         Debug.LogError("Failed to find enclosing type.");
+            //         return null;
+            //     }
+
+            //     type = GetFieldDeclaringType(type, field);
+            // }
 
             return type;
         }
