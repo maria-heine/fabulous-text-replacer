@@ -37,6 +37,9 @@ namespace FabulousReplacer
 
             if (fields.Count == 0) return;
 
+            Debug.Log($"{fields.Count}");
+            
+
             fields.ToArray().ExecuteOnAllFieldsOfType<T>(owner, onTypeMatchingField, onCustomClass);
         }
 
@@ -49,6 +52,8 @@ namespace FabulousReplacer
         {
             foreach (FieldInfo field in fields)
             {
+                Debug.Log($"<color=red>{field.Name}</color>");
+                
                 if (field.FieldType.IsArray)
                 {
                     if (field.FieldType.GetElementType() == typeof(T))
@@ -71,11 +76,14 @@ namespace FabulousReplacer
                     if (field.FieldType.GenericTypeArguments.Single() == typeof(T))
                     {
                         List<T> list = field.GetValue(owner) as List<T>;
+                        Debug.Log($"<color=yellow>{field.DeclaringType.GetField("someOtherString").GetValue(owner)} got a list {field.Name} of elements {list.Count}</color>");
 
                         if (list == null) continue;
 
                         foreach (T obj in list)
                         {
+                            Debug.Log($"{obj}");
+                            
                             if (onTypeMatchingField(owner, field, obj))
                             {
                                 return;
@@ -86,10 +94,12 @@ namespace FabulousReplacer
                     {
                         IEnumerable enumerable = (IEnumerable)field.GetValue(owner);
 
-                        // Debug.Log($"<color=cyan>{enumerable} \n</color>");
+                        Debug.Log($"<color=cyan> {owner} \n</color>");
 
                         foreach (var item in enumerable)
                         {
+                            Debug.Log($"{item}");
+                            
                             if (onCustomClass(item, field))
                             {
                                 return;
@@ -222,9 +232,6 @@ namespace FabulousReplacer
                 },
                 onCustomClass: (fieldOwner, fieldInfo) =>
                 {
-                    // TODO BUUUUG HEREEEEEEE
-                    // ADDS MULTIPLE TIMES IN CASE OF CUSTOM ARRAY
-                    // fieldInformation = null;
                     //! follow the white rabbit
                     if (fieldOwner.IsReferencingComponentOfType(component, ref fieldInformation))
                     {
@@ -234,10 +241,12 @@ namespace FabulousReplacer
                         //! Note that this might be a problem in case of inherited fields, check it
                         externallyOwnedFieldInformation.ExternalOwnerType = someObject.GetType();
                         externallyOwnedFieldInformation.ExternalOwnerAssemblyName = someObject.GetType().AssemblyQualifiedName;
-                        externallyOwnedFieldInformation.UpdatePreview();
+                        externallyOwnedFieldInformation.UpdateSignature();
                         fieldInformation.AddFieldInformationParameter(externallyOwnedFieldInformation);
 
                         FieldType fieldType;
+
+                        fieldInformation.FieldType &= ~FieldType.Direct; 
 
                         if (fieldOwner.GetType().IsNested)
                         {
@@ -250,19 +259,19 @@ namespace FabulousReplacer
                             fieldType = FieldType.External;
                         }
 
-                        if (fieldInfo.FieldType.IsGenericType)
-                        {
-                            if (fieldInfo.FieldType.GetGenericTypeDefinition() == typeof(List<>))
-                            {
-                                //* This means text field is hidden within a list
-                                fieldType |= FieldType.Listed;
-                            }
-                        }
-                        else if (fieldInfo.FieldType.IsArray)
-                        {
-                            //* This means text field is hidden within an array
-                            fieldType |= FieldType.Arrayed;
-                        }
+                        // if (fieldInfo.FieldType.IsGenericType)
+                        // {
+                        //     if (fieldInfo.FieldType.GetGenericTypeDefinition() == typeof(List<>))
+                        //     {
+                        //         //* This means text field is hidden within a list
+                        //         fieldType |= FieldType.Listed;
+                        //     }
+                        // }
+                        // else if (fieldInfo.FieldType.IsArray)
+                        // {
+                        //     //* This means text field is hidden within an array
+                        //     fieldType |= FieldType.Arrayed;
+                        // }
 
                         fieldInformation.FieldType = fieldType;
 

@@ -22,15 +22,11 @@ namespace FabulousReplacer
         private const string ADAPTER_GAMEOBJECT_NAME = "{0}_TMProAdapter";
 
         UpdatedReferenceAddressBook _updatedReferenceAddressBook;
-        IntegerField lowRange;
-        IntegerField highRange;
         TMP_FontAsset fontAsset;
 
-        public ComponentReplacer(UpdatedReferenceAddressBook updatedReferenceAddressBook, Button updateComponentsButton, IntegerField lowRange, IntegerField highRange)
+        public ComponentReplacer(UpdatedReferenceAddressBook updatedReferenceAddressBook, Button updateComponentsButton)
         {
             _updatedReferenceAddressBook = updatedReferenceAddressBook;
-            this.lowRange = lowRange;
-            this.highRange = highRange;
 
             updateComponentsButton.clicked += () =>
             {
@@ -44,20 +40,17 @@ namespace FabulousReplacer
 
         private void RunReplaceLogic()
         {
-            int from = lowRange.value >= _updatedReferenceAddressBook.Count ? _updatedReferenceAddressBook.Count : lowRange.value;
-            int to = highRange.value >= _updatedReferenceAddressBook.Count ? _updatedReferenceAddressBook.Count : highRange.value;
-
             try
             {
                 AssetDatabase.StartAssetEditing();
 
-                for (int i = from; i < to; i++)
+                foreach (var reference in _updatedReferenceAddressBook)
                 {
-                    var references = _updatedReferenceAddressBook[i];
+                    List<ReplaceUnit> referenceGroup = reference.Value;
 
-                    foreach (ReplaceUnit reference in references)
+                    foreach (ReplaceUnit replaceUnit in referenceGroup)
                     {
-                        ReplaceTextComponent(reference);
+                        ReplaceTextComponent(replaceUnit);
                     }
                 }
             }

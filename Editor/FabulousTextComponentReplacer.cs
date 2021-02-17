@@ -44,8 +44,6 @@ namespace FabulousReplacer
         UpdatedReferenceAddressBook _updatedReferenceAddressBook;
 
         Box _boxDisplayer;
-        IntegerField _lowRange;
-        IntegerField _highRange;
         ObjectField _selectedPrefabsField;
 
         Action UpgradeProgressBar;
@@ -159,22 +157,13 @@ namespace FabulousReplacer
             { text = "Analyse prefabs" };
             container.Add(analysePrefabsButton);
 
-            _lowRange = new IntegerField("Replacement low range");
-            _lowRange.value = 0;
-            container.Add(_lowRange);
-
-            _highRange = new IntegerField("Replacement high range");
-            _highRange.value = 20;
-            container.Add(_highRange);
 
             var updateScriptsButton = new Button()
             { text = "Update scripts" };
             _scriptUpdater =
                 new ScriptUpdater(
                     UpdatedReferenceAddressBook,
-                    updateScriptsButton,
-                    _lowRange,
-                    _highRange);
+                    updateScriptsButton);
             container.Add(updateScriptsButton);
 
             var updateComponentsButton = new Button()
@@ -182,9 +171,7 @@ namespace FabulousReplacer
             _componentReplacer =
                 new ComponentReplacer(
                     UpdatedReferenceAddressBook,
-                    updateComponentsButton,
-                    _lowRange,
-                    _highRange);
+                    updateComponentsButton);
             container.Add(updateComponentsButton);
 
             analysePrefabsButton.clicked += () =>
@@ -471,22 +458,6 @@ namespace FabulousReplacer
             loggingDepthField.value = 30;
             box.Add(loggingDepthField);
 
-            var logRange = new Button(() =>
-            {
-                var msb = new MultilineStringBuilder("Log prefabs in update range");
-
-                msb.AddLine($"Total length of address book is {UpdatedReferenceAddressBook.Paths.Length}");
-
-                for (int i = _lowRange.value; i < _highRange.value; i++)
-                {
-                    msb.AddLine(UpdatedReferenceAddressBook.Paths[i]);
-                }
-
-                DisplayInBox(GetTextElement(msb.ToString()));
-            })
-            { text = "Log prefabs in update range" };
-            box.Add(logRange);
-
             var logOverridesButton = new Button(() =>
             {
                 var msb = new MultilineStringBuilder("Log nested prefabs with overrides");
@@ -731,23 +702,21 @@ namespace FabulousReplacer
         /// <returns>Returns all referenced Replace Units with respect to provided textComponent</returns>
         private List<ReplaceUnit> CheckTextAgainstFoundMonobehaviours(Text textComponent, GameObject parentPrefab)
         {
-
             List<MonoBehaviour> monoBehaviours = _customMonobehavioursByPrefab[parentPrefab];
             List<ReplaceUnit> updatedReferences = new List<ReplaceUnit>(monoBehaviours.Count);
 
-            Debug.Log($"<color=yellow>{parentPrefab} {textComponent}</color>");
+            // Debug.Log($"<color=yellow>{parentPrefab} {textComponent}</color>");
 
             foreach (MonoBehaviour mono in monoBehaviours)
             {
-                Debug.Log($"<color=cyan>{mono}</color>");
+                // Debug.Log($"<color=cyan>{mono}</color>");
+
                 FieldInformation fieldInformation = null;
 
                 if (mono.IsReferencingComponentOfType<Text>(textComponent, ref fieldInformation))
                 {
                     updatedReferences.Add(new ReplaceUnit(parentPrefab, textComponent, mono, fieldInformation));
                     _replaceCounter.updatedTextComponentReferencesCount++;
-                    // Debug.Log($"<color=yellow>Yas found something</color>");
-
                 }
                 else
                 {
