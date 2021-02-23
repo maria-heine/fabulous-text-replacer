@@ -11,34 +11,31 @@ namespace FabulousReplacer
     public static class ReferenceFinder
     {
         // TODO This really requires checking whether we are getting everything we want.
-        public const BindingFlags FIELD_SEARCH_FLAGS = BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance;
+        public const BindingFlags GENEROUS_NONSTATIC_FIELD_SEARCH_FLAGS = BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance;
 
         #region PRIVATE
 
         private static void IterateOverFieldsOfType<T>(
             object owner,
-            Func<object, FieldInfo, T, bool> onTypeMatchingField,
-            Func<object, FieldInfo, bool> onCustomClass,
+            Action<object, FieldInfo, T> onTypeMatchingField,
+            Action<object, FieldInfo> onCustomClass,
             bool includeParnetMonoFields = false)
             where T : Component
         {
             Type ownerType = owner.GetType();
 
-            List<FieldInfo> fields = ownerType.GetFields(FIELD_SEARCH_FLAGS | BindingFlags.DeclaredOnly).ToList();
+            List<FieldInfo> fields = ownerType.GetFields(GENEROUS_NONSTATIC_FIELD_SEARCH_FLAGS | BindingFlags.DeclaredOnly).ToList();
 
             if (includeParnetMonoFields)
             {
                 while (ownerType.BaseType != null)
                 {
                     ownerType = ownerType.BaseType;
-                    fields.AddRange(ownerType.GetFields(FIELD_SEARCH_FLAGS | BindingFlags.DeclaredOnly));
+                    fields.AddRange(ownerType.GetFields(GENEROUS_NONSTATIC_FIELD_SEARCH_FLAGS | BindingFlags.DeclaredOnly));
                 }
             }
 
             if (fields.Count == 0) return;
-
-            Debug.Log($"{fields.Count}");
-            
 
             fields.ToArray().ExecuteOnAllFieldsOfType<T>(owner, onTypeMatchingField, onCustomClass);
         }
@@ -46,14 +43,12 @@ namespace FabulousReplacer
         private static void ExecuteOnAllFieldsOfType<T>(
             this FieldInfo[] fields,
             object owner,
-            Func<object, FieldInfo, T, bool> onTypeMatchingField,
-            Func<object, FieldInfo, bool> onCustomClass)
+            Action<object, FieldInfo, T> onTypeMatchingField,
+            Action<object, FieldInfo> onCustomClass)
             where T : Component
         {
             foreach (FieldInfo field in fields)
             {
-                Debug.Log($"<color=red>{field.Name}</color>");
-                
                 if (field.FieldType.IsArray)
                 {
                     if (field.FieldType.GetElementType() == typeof(T))
@@ -64,10 +59,16 @@ namespace FabulousReplacer
 
                         foreach (T obj in arr)
                         {
-                            if (onTypeMatchingField(owner, field, obj))
-                            {
-                                return;
-                            }
+                            onTypeMatchingField(owner, field, obj);
+                        }
+                    }
+                    else
+                    {
+                        IEnumerable enumerable = (IEnumerable)field.GetValue(owner);
+
+                        foreach (var item in enumerable)
+                        {
+                            onCustomClass(item, field);
                         }
                     }
                 }
@@ -76,34 +77,23 @@ namespace FabulousReplacer
                     if (field.FieldType.GenericTypeArguments.Single() == typeof(T))
                     {
                         List<T> list = field.GetValue(owner) as List<T>;
-                        Debug.Log($"<color=yellow>{field.DeclaringType.GetField("someOtherString").GetValue(owner)} got a list {field.Name} of elements {list.Count}</color>");
+
+                        // Debug.Log($"<color=yellow>{field.DeclaringType.GetField("someOtherString").GetValue(owner)} got a list {field.Name} of elements {list.Count}</color>");
 
                         if (list == null) continue;
 
                         foreach (T obj in list)
                         {
-                            Debug.Log($"{obj}");
-                            
-                            if (onTypeMatchingField(owner, field, obj))
-                            {
-                                return;
-                            }
+                            onTypeMatchingField(owner, field, obj);
                         }
                     }
                     else
                     {
-                        IEnumerable enumerable = (IEnumerable)field.GetValue(owner);
-
-                        Debug.Log($"<color=cyan> {owner} \n</color>");
+                        IList enumerable = (IList)field.GetValue(owner);
 
                         foreach (var item in enumerable)
                         {
-                            Debug.Log($"{item}");
-                            
-                            if (onCustomClass(item, field))
-                            {
-                                return;
-                            }
+                            onCustomClass(item, field);
                         }
                     }
                 }
@@ -115,23 +105,16 @@ namespace FabulousReplacer
 
                         if (obj != null)
                         {
-                            if (onTypeMatchingField(owner, field, obj))
-                            {
-                                return;
-                            }
+                            onTypeMatchingField(owner, field, obj);
                         }
                     }
                     else if (!field.FieldType.IsPrimitive && field.FieldType != typeof(string) && field.FieldType != typeof(object))
                     {
                         //* Here we are checking if the field is a custom class
-                        // Debug.Log($"<color=cyan>Custom class encountered: {field.FieldType}</color>");
 
                         var newOwner = field.GetValue(owner);
 
-                        if (onCustomClass(newOwner, field))
-                        {
-                            return;
-                        }
+                        onCustomClass(newOwner, field);
                     }
                 }
             }
@@ -143,7 +126,7 @@ namespace FabulousReplacer
         public static bool TryGetAllFieldsOfType<T>(this MonoBehaviour mono, out List<FieldInfo> foundTFields)
             where T : Component
         {
-            FieldInfo[] fields = mono.GetType().GetFields(FIELD_SEARCH_FLAGS);
+            FieldInfo[] fields = mono.GetType().GetFields(GENEROUS_NONSTATIC_FIELD_SEARCH_FLAGS);
             foundTFields = new List<FieldInfo>(fields.Length);
 
             foreach (FieldInfo field in fields)
@@ -192,10 +175,12 @@ namespace FabulousReplacer
             return foundTFields.Count > 0;
         }
 
-        public static bool IsReferencingComponentOfType<T>(this object someObject, T component, ref FieldInformation referencedFieldInformation)
+        // public static bool IsReferencingComponentOfType<T>(this object someObject, T component, ref FieldInformation referencedFieldInformation)
+        public static bool IsReferencingComponentOfType<T>(this object someObject, T component, ref List<FieldInformation> referencingFields)
             where T : Component
         {
-            FieldInformation fieldInformation = referencedFieldInformation;
+            List<FieldInformation> methodLocalReferencingFields = null;
+            FieldInformation fieldInformation;
 
             IterateOverFieldsOfType<T>(
                 owner: someObject,
@@ -207,7 +192,7 @@ namespace FabulousReplacer
 
                         fieldInformation = new FieldInformation(fieldOwnerType);
 
-                        fieldInformation.TextFieldName = fieldInfo.Name;
+                        fieldInformation.FieldName = fieldInfo.Name;
                         fieldInformation.FieldType = FieldType.Direct;
 
                         if (fieldInfo.FieldType.IsGenericType)
@@ -215,75 +200,112 @@ namespace FabulousReplacer
                             if (fieldInfo.FieldType.GetGenericTypeDefinition() == typeof(List<>))
                             {
                                 //* This means text field is hidden within a list
-                                fieldInformation.FieldType = fieldInformation.FieldType | FieldType.Listed;
-                                Debug.Log($"<color=magenta>A listed field {fieldInformation.FieldType} {fieldInfo.Name} {fieldOwner.GetType()}</color>");
+                                fieldInformation.FieldType |= FieldType.Listed;
+                                var list = (List<T>)fieldInfo.GetValue(fieldOwner);
+                                EnumerableFieldInformation efi = ScriptableObject.CreateInstance<EnumerableFieldInformation>();
+                                efi.index = list.IndexOf(fieldValue);
+                                efi.length = list.Count;
+                                Debug.Log($"{efi.GetType()}");
+
+                                fieldInformation.AddFieldInformationParameter(efi);
+                                // Debug.Log($"<color=magenta>A listed field {fieldInformation.FieldType} {fieldInfo.Name} {fieldOwner.GetType()}</color>");
                             }
                         }
                         else if (fieldInfo.FieldType.IsArray)
                         {
                             //* This means text field is hidden within an array
-                            fieldInformation.FieldType = fieldInformation.FieldType | FieldType.Arrayed;
-                            Debug.Log($"<color=BF55CB>ARRAY! {fieldInformation.FieldType} {fieldInfo.Name} {fieldOwner.GetType()}</color>");
+                            fieldInformation.FieldType |= FieldType.Arrayed;
+                            var array = (T[])fieldInfo.GetValue(fieldOwner);
+                            EnumerableFieldInformation efi = ScriptableObject.CreateInstance<EnumerableFieldInformation>();
+                            efi.index = Array.IndexOf(array, fieldValue);
+                            efi.length = array.Length;
+                            fieldInformation.AddFieldInformationParameter(efi);
+                            // Debug.Log($"<color=BF55CB>ARRAY! {fieldInformation.FieldType} {fieldInfo.Name} {fieldOwner.GetType()}</color>");
                         }
 
-                        return true;
+                        if (methodLocalReferencingFields == null)
+                        {
+                            methodLocalReferencingFields = new List<FieldInformation>();
+                        }
+
+                        methodLocalReferencingFields.Add(fieldInformation);
                     }
-                    else return false;
                 },
                 onCustomClass: (fieldOwner, fieldInfo) =>
                 {
                     //! follow the white rabbit
-                    if (fieldOwner.IsReferencingComponentOfType(component, ref fieldInformation))
+                    List<FieldInformation> externalFieldsInformation = null;
+
+                    if (fieldOwner.IsReferencingComponentOfType(component, ref externalFieldsInformation))
                     {
-                        ExternallyOwnedFieldInformation externallyOwnedFieldInformation = new ExternallyOwnedFieldInformation();
-                        externallyOwnedFieldInformation.ExternalOwnerFieldName = fieldInfo.Name;
+                        if (externalFieldsInformation == null) Debug.LogError("oof");
 
-                        //! Note that this might be a problem in case of inherited fields, check it
-                        externallyOwnedFieldInformation.ExternalOwnerType = someObject.GetType();
-                        externallyOwnedFieldInformation.ExternalOwnerAssemblyName = someObject.GetType().AssemblyQualifiedName;
-                        externallyOwnedFieldInformation.UpdateSignature();
-                        fieldInformation.AddFieldInformationParameter(externallyOwnedFieldInformation);
-
-                        FieldType fieldType;
-
-                        fieldInformation.FieldType &= ~FieldType.Direct; 
-
-                        if (fieldOwner.GetType().IsNested)
+                        foreach (FieldInformation externalField in externalFieldsInformation)
                         {
-                            //* This means a nested class
-                            fieldType = FieldType.Nested;
+                            ExternallyOwnedFieldInformation eofi = ScriptableObject.CreateInstance<ExternallyOwnedFieldInformation>();
+                            
+                            eofi.fieldInformation = new FieldInformation(someObject.GetType());
+                            eofi.fieldInformation.FieldName = fieldInfo.Name;
+                            if (fieldInfo.FieldType.IsGenericType && fieldInfo.FieldType.GetGenericTypeDefinition() == typeof(List<>))
+                            {
+                                eofi.fieldInformation.FieldType |= FieldType.Listed;
+                                var list = (IList)fieldInfo.GetValue(someObject);
+                                EnumerableFieldInformation efi = ScriptableObject.CreateInstance<EnumerableFieldInformation>();
+                                efi.index = list.IndexOf(fieldOwner);
+                                efi.length = list.Count;
+                                eofi.fieldInformation.AddFieldInformationParameter(efi);
+                            }
+                            else if (fieldInfo.FieldType.IsArray)
+                            {
+                                eofi.fieldInformation.FieldType |= FieldType.Arrayed;
+                                var array = (Array)fieldInfo.GetValue(someObject);
+                                EnumerableFieldInformation efi = ScriptableObject.CreateInstance<EnumerableFieldInformation>();
+                                efi.index = Array.IndexOf(array, fieldOwner);
+                                efi.length = array.Length;
+                                eofi.fieldInformation.AddFieldInformationParameter(efi);
+                            }
+                            else
+                            {
+                                eofi.fieldInformation.FieldType = FieldType.Direct;
+                            }
+
+                            eofi.ExternalOwnerFieldName = fieldInfo.Name;
+
+                            //! Note that this might be a problem in case of inherited fields, check it
+                            eofi.ExternalOwnerType = someObject.GetType();
+                            eofi.ExternalOwnerAssemblyName = someObject.GetType().AssemblyQualifiedName;
+                            externalField.AddFieldInformationParameter(eofi);
+
+                            FieldType fieldType = externalField.FieldType;
+                            fieldType &= ~FieldType.Direct;
+
+                            if (fieldOwner.GetType().IsNested)
+                            {
+                                //* This means a nested class
+                                fieldType |= FieldType.Nested;
+                            }
+                            else
+                            {
+                                //* This means an external class is a field that holds reference to the text component
+                                fieldType |= FieldType.External;
+                            }
+
+                            externalField.FieldType = fieldType;
                         }
-                        else
+
+                        if (methodLocalReferencingFields == null)
                         {
-                            //* This means an external class is a field that holds reference to the text component
-                            fieldType = FieldType.External;
+                            methodLocalReferencingFields = new List<FieldInformation>();
                         }
 
-                        // if (fieldInfo.FieldType.IsGenericType)
-                        // {
-                        //     if (fieldInfo.FieldType.GetGenericTypeDefinition() == typeof(List<>))
-                        //     {
-                        //         //* This means text field is hidden within a list
-                        //         fieldType |= FieldType.Listed;
-                        //     }
-                        // }
-                        // else if (fieldInfo.FieldType.IsArray)
-                        // {
-                        //     //* This means text field is hidden within an array
-                        //     fieldType |= FieldType.Arrayed;
-                        // }
-
-                        fieldInformation.FieldType = fieldType;
-
-                        return true;
+                        methodLocalReferencingFields.AddRange(externalFieldsInformation);
                     }
-                    else return false;
                 },
                 includeParnetMonoFields: true);
 
-            if (fieldInformation != null)
+            if (methodLocalReferencingFields != null)
             {
-                referencedFieldInformation = fieldInformation;
+                referencingFields = methodLocalReferencingFields;
                 return true;
             }
             else

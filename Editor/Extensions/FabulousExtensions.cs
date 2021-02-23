@@ -22,7 +22,7 @@ namespace FabulousReplacer
             Type originalType = type;
 
             FieldInfo fieldInfo = type
-                .GetFields(ReferenceFinder.FIELD_SEARCH_FLAGS)
+                .GetFields(ReferenceFinder.GENEROUS_NONSTATIC_FIELD_SEARCH_FLAGS)
                 .Where(f => f.DeclaringType == type)
                 .FirstOrDefault(f => f.Name == field);
             
@@ -60,6 +60,11 @@ namespace FabulousReplacer
             // }
 
             return type;
+        }
+
+        public static bool HasOneOfTheFlags(this FieldType fieldType1, FieldType fieldType2)
+        {
+            return (fieldType1 &= fieldType2) != 0;
         }
 
         public static TextElement GetTextElement(string textToDisplay)

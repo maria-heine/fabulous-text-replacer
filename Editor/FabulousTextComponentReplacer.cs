@@ -705,18 +705,17 @@ namespace FabulousReplacer
             List<MonoBehaviour> monoBehaviours = _customMonobehavioursByPrefab[parentPrefab];
             List<ReplaceUnit> updatedReferences = new List<ReplaceUnit>(monoBehaviours.Count);
 
-            // Debug.Log($"<color=yellow>{parentPrefab} {textComponent}</color>");
-
             foreach (MonoBehaviour mono in monoBehaviours)
             {
-                // Debug.Log($"<color=cyan>{mono}</color>");
+                List<FieldInformation> referencingFields = null;
 
-                FieldInformation fieldInformation = null;
-
-                if (mono.IsReferencingComponentOfType<Text>(textComponent, ref fieldInformation))
+                if (mono.IsReferencingComponentOfType<Text>(textComponent, ref referencingFields))
                 {
-                    updatedReferences.Add(new ReplaceUnit(parentPrefab, textComponent, mono, fieldInformation));
-                    _replaceCounter.updatedTextComponentReferencesCount++;
+                    foreach (FieldInformation fi in referencingFields)
+                    {
+                        updatedReferences.Add(new ReplaceUnit(parentPrefab, textComponent, mono, fi));
+                        _replaceCounter.updatedTextComponentReferencesCount++;
+                    }
                 }
                 else
                 {
@@ -790,33 +789,6 @@ namespace FabulousReplacer
                     msb.AddLine($"---> by: {referencer}");
                 }
             }
-
-            // foreach (var textRef in textRefs)
-            // {
-            //     msb.AddLine($"Text at: {textRef.originalPrefabText.gameObject.name}:");
-
-            //     if (textRef.localTextReferences != null && textRef.localTextReferences.Count > 0)
-            //     {
-            //         msb.AddLine($"---> Has internal references:");
-            //         foreach (var fukkkk in textRef.localTextReferences)
-            //         {
-            //             msb.AddLine($"------> {fukkkk}");
-            //         }
-            //     }
-
-            //     if (textRef.foreignTextReferencesDictionary != null && textRef.foreignTextReferencesDictionary.Count > 0)
-            //     {
-            //         msb.AddLine($"(!!!) Has foreign text references:");
-            //         foreach (var kvp in textRef.foreignTextReferencesDictionary)
-            //         {
-            //             msb.AddLine($"---> Foreign reference to an instance of: {kvp.Key} ");
-            //             foreach (var fukkkk in kvp.Value)
-            //             {
-            //                 msb.AddLine($"------> {fukkkk} component.");
-            //             }
-            //         }
-            //     }
-            // }
 
             msb.AddSeparator();
         }

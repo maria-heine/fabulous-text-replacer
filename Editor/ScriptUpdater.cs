@@ -23,17 +23,12 @@ namespace FabulousReplacer
         private const string ADAPTER_PARENT_NAME = "{0}_TextAdaptersParent";
 
         UpdatedReferenceAddressBook _updatedReferenceAddressBook;
-
-        [Obsolete] // TODO remove
-        Dictionary<Type, List<string>> _updatedMonoFields;
-
-        Dictionary<Type, List<FieldInformation>> _fieldsToUpdateByDefiningType;
+        Dictionary<Type, List<FieldInformation>> _fieldsToUpdateByFieldOwnerType;
 
         public ScriptUpdater(UpdatedReferenceAddressBook updatedReferenceAddressBook, Button updateScriptsButton)
         {
             _updatedReferenceAddressBook = updatedReferenceAddressBook;
-            _updatedMonoFields = new Dictionary<Type, List<string>>();
-            _fieldsToUpdateByDefiningType = new Dictionary<Type, List<FieldInformation>>();
+            _fieldsToUpdateByFieldOwnerType = new Dictionary<Type, List<FieldInformation>>();
 
             updateScriptsButton.clicked += () =>
             {
@@ -41,7 +36,6 @@ namespace FabulousReplacer
             };
         }
 
-        //? What about private Text fields?
         private void RunReplaceLogic()
         {
             foreach (var reference in _updatedReferenceAddressBook)
@@ -54,23 +48,19 @@ namespace FabulousReplacer
                 }
             }
 
-            //todo temporary
-            MassReplaceFields();
-
-
-            // try
-            // {
-            //     AssetDatabase.StartAssetEditing();
-            //     MassReplaceFields();
-            // }
-            // catch (Exception ex)
-            // {
-            //     throw ex;
-            // }
-            // finally
-            // {
-            //     AssetDatabase.StopAssetEditing();
-            // }
+            try
+            {
+                AssetDatabase.StartAssetEditing();
+                MassReplaceFields();
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+            finally
+            {
+                AssetDatabase.StopAssetEditing();
+            }
 
             CompilationPipeline.RequestScriptCompilation();
         }
@@ -85,48 +75,21 @@ namespace FabulousReplacer
         {
             if (reference.isReferenced)
             {
-                Type definingType = reference.fieldInformation.FieldOwnerType;
+                Type definingType = reference.fieldInformation.FieldDefiningType;
                 FieldInformation fieldInformation = reference.fieldInformation;
 
-                //TODO blocked field information comparison, duplicates will happen
-                // if (_fieldsToUpdateByType.ContainsKey(scriptType) && _fieldsToUpdateByType[scriptType].Contains())
-                // {
-                //     return;
-                // }
-
-                if (!_fieldsToUpdateByDefiningType.ContainsKey(definingType))
+                if (!_fieldsToUpdateByFieldOwnerType.ContainsKey(definingType))
                 {
-                    _fieldsToUpdateByDefiningType[definingType] = new List<FieldInformation>();
+                    _fieldsToUpdateByFieldOwnerType[definingType] = new List<FieldInformation>();
                 }
 
-                _fieldsToUpdateByDefiningType[definingType].Add(fieldInformation);
+                _fieldsToUpdateByFieldOwnerType[definingType].Add(fieldInformation);
             }
         }
 
         private void MassReplaceFields()
         {
-
-            /*
-            1. Direct fields
-            Collect all of the fieldNames in given script and replace them in one sector
-
-            2. Direct list
-            Replace the list just once.
-            Add references in next step
-
-            3. Nested field
-            //Gather all fields of a nested class
-            Gather all different nested classes (usually oonly one)
-            For each edit Text fields within
-
-            4. List of nested fields
-            Same as 3
-
-            5. External class
-            Gather all text fields to replace in external class
-            */
-
-            foreach (var item in _fieldsToUpdateByDefiningType)
+            foreach (var item in _fieldsToUpdateByFieldOwnerType)
             {
                 Type fieldDefiningType = item.Key;
                 List<FieldInformation> fieldInfos = item.Value;
@@ -135,47 +98,100 @@ namespace FabulousReplacer
                 var fieldInfoGroups = fieldInfos
                     .GroupBy(fi => fi.FieldType, fi => fi);
 
-                string path = null;
-                List<string> scriptLines = null;
+                Dictionary<string, List<string>> scriptLinesByPath = new Dictionary<string, List<string>>();
 
                 foreach (var group in fieldInfoGroups)
                 {
                     FieldType fieldType = group.Key;
-                    Type editedScriptType;
-
-                    switch (fieldType)
-                    {
-                        case FieldType.Nested:
-                            editedScriptType = fieldInfos.First().FieldOwnerType;
-                            Debug.Log($"{editedScriptType}");
-                            break;
-                        default:
-                            editedScriptType = fieldDefiningType;
-                            break;
-                    }
-
-                    path = GetScriptFilePath(editedScriptType);
 
                     //* Get a list of all FieldInformation within one FieldType, one fieldDefiningType 
                     //* with distinct actual fields that we want to update in code
                     FieldInformation[] distinctTextFieldInformations = group
                         .ToList()
-                        .GroupBy(x => x.TextFieldName)
+                        .GroupBy(x => x.FieldName)
                         .Select(x => x.FirstOrDefault())
                         .ToArray();
 
-                    if (scriptLines == null)
+                    string path = GetScriptFilePath(distinctTextFieldInformations.First());
+
+                    if (!scriptLinesByPath.ContainsKey(path))
                     {
-                        scriptLines = GetUpdatedScriptLines(path, editedScriptType, fieldType, distinctTextFieldInformations);
+                        Debug.Log($"{fieldType} NULL script lines ");
+
+                        scriptLinesByPath.Add(path, new List<string>());
+                        scriptLinesByPath[path] = GetUpdatedScriptLines(path, fieldDefiningType, fieldType, distinctTextFieldInformations);
                     }
                     else
                     {
-                        scriptLines = GetUpdatedScriptLines(scriptLines, fieldType, distinctTextFieldInformations);
+                        Debug.Log($"{fieldType} Not null script lines ");
+                        scriptLinesByPath[path] = GetUpdatedScriptLines(scriptLinesByPath[path], fieldType, distinctTextFieldInformations);
                     }
                 }
 
-                SaveUpdateScript(path, scriptLines);
+                if (scriptLinesByPath.Count > 1)
+                {
+                    Debug.Log($"<color=yellow>Actually had more than one path in case of {fieldDefiningType}</color>");
+                }
+
+                foreach (var kvp in scriptLinesByPath)
+                {
+                    SaveUpdateScript(kvp.Key, kvp.Value);
+                }
             }
+        }
+
+        /* 
+        * This method can only work guaranteed the script files follow convention of being named the
+        * same as the class they contain.
+        TODO Something should be done about the possibility of partial classes
+        TODO Apparently not much can be done:
+        https://stackoverflow.com/questions/10960071/how-to-find-path-to-cs-file-by-its-type-in-c-sharp
+        */
+        private static string GetScriptFilePath(FieldInformation fieldInformation)
+        {
+            FieldType fieldType = fieldInformation.FieldType;
+            string scriptFileName = null;
+
+            //* Below is a bold assumbtion that healthy standards of defining a matching file name with the class it contains
+            if (fieldType.HasFlag(FieldType.External))
+            {
+                scriptFileName = fieldInformation.FieldDefiningType.Name;
+            }
+            else
+            {
+                scriptFileName = fieldInformation.FieldOwnerType.Name;
+            }
+
+            string[] assets = AssetDatabase.FindAssets($"{scriptFileName} t:MonoScript");
+
+            Debug.Log($"{scriptFileName}");
+
+
+            string selectedAsset = null;
+
+            if (assets.Length != 1)
+            {
+                foreach (string asset in assets)
+                {
+                    string assetPath = AssetDatabase.GUIDToAssetPath(asset);
+
+                    if (assetPath.Contains($"{scriptFileName}.cs"))
+                    {
+                        selectedAsset = asset;
+                        Debug.Log($"From overlapping selections chose: {assetPath}");
+                    }
+                }
+            }
+            else
+            {
+                selectedAsset = assets[0];
+            }
+
+            var path = AssetDatabase.GUIDToAssetPath(selectedAsset);
+
+            Debug.Log($"{path}");
+
+            return path;
         }
 
         const string REPLACER_REGION_TITLE = "Autogenerated UnityEngine.Text replacer code";
@@ -217,59 +233,24 @@ namespace FabulousReplacer
             return scriptLines;
         }
 
-        private static List<string> GetTemplateLines(FieldType fieldsType, FieldInformation[] fieldInformations)
-        {
-            var templateLines = new List<string>();
-
-            if (fieldsType == FieldType.Direct || fieldsType == FieldType.Nested || fieldsType == FieldType.External)
-            {
-                Debug.Log($"standard {templateLines.Count}");
-                foreach (var fieldInformation in fieldInformations)
-                {
-                    IEnumerable<string> lines = GetAdapterTemplate(fieldInformation.TextFieldName);
-                    templateLines.AddRange(lines);
-                }
-            }
-            else if (fieldsType.HasFlag(FieldType.Arrayed | FieldType.Direct))
-            {
-                Debug.Log($"Arrayed direct");
-                foreach (var fieldInformation in fieldInformations)
-                {
-                    string line = $"[SerializeField] TMProAdapter[] {fieldInformation.TextFieldName};";
-                    templateLines.Add(line);
-                }
-            }
-            else if (fieldsType.HasFlag(FieldType.Listed | FieldType.Direct))
-            {
-                Debug.Log($"Listed direct");
-                foreach (var fieldInformation in fieldInformations)
-                {
-                    string line = $"[SerializeField] List<TMProAdapter> {fieldInformation.TextFieldName};";
-                    templateLines.Add(line);
-                }
-            }
-            else
-            {
-                Debug.LogError($"what? {fieldsType}");
-            }
-
-            return templateLines;
-        }
-
         private static List<string> UpdateReplacerRegion(IEnumerable<string> currentScriptLines, FieldType fieldsType, FieldInformation[] fieldInformations)
         {
-            Debug.Log($"Updating");
-
             List<string> finalLines = new List<string>();
 
-            Regex replacerRegionEndRx = new Regex(REPLACER_END_STRING);
+            Regex replacerRegionEndRx = new Regex(@"\bfin\b");
             Regex oldFieldSearchRx = GetOldFieldSearchPattern(fieldInformations);
+            Regex indentRx = new Regex(@"^\s+");
 
             foreach (string line in currentScriptLines)
             {
                 if (replacerRegionEndRx.IsMatch(line))
                 {
-                    finalLines.AddRange(GetTemplateLines(fieldsType, fieldInformations));
+                    Match indentation = indentRx.Match(line);
+
+                    foreach (string templateLine in GetTemplateLines(fieldsType, fieldInformations))
+                    {
+                        finalLines.Add($"{indentation.Value}{templateLine}");
+                    }
                 }
 
                 if (oldFieldSearchRx.IsMatch(line))
@@ -283,6 +264,13 @@ namespace FabulousReplacer
                 }
             }
 
+            string asd = "";
+            foreach (var item in currentScriptLines)
+            {
+                asd += item + "\n";
+            }
+            Debug.Log($"{asd}");
+
             return finalLines;
         }
 
@@ -292,8 +280,6 @@ namespace FabulousReplacer
             FieldInformation[] fieldInformations,
             IEnumerable<string> templateLines)
         {
-            Debug.Log($"Inserting");
-
             List<string> finalScriptLines = new List<string>();
 
             Regex classRx = GetClass(fieldInformations.First());
@@ -352,6 +338,13 @@ namespace FabulousReplacer
                 }
             }
 
+            string asd = "";
+            foreach (var item in finalScriptLines)
+            {
+                asd += item + "\n";
+            }
+            Debug.Log($"{asd}");
+
             return finalScriptLines;
         }
 
@@ -387,11 +380,11 @@ namespace FabulousReplacer
 
             string singleFieldPattern = null;
 
-            if (fieldType.HasFlag(FieldType.Listed | FieldType.Direct))
+            if (fieldType.HasFlag(FieldType.Listed))
             {
                 singleFieldPattern = @"\sList<Text>\s+{0}";
             }
-            else if (fieldType.HasFlag(FieldType.Arrayed | FieldType.Direct))
+            else if (fieldType.HasFlag(FieldType.Arrayed))
             {
                 singleFieldPattern = @"\sText\[\]\s+{0}";
             }
@@ -403,12 +396,12 @@ namespace FabulousReplacer
             string fieldSearchPattern = @"(";
             for (int i = 0; i < fieldInformations.Length; i++)
             {
-                fieldSearchPattern += string.Format(singleFieldPattern, fieldInformations[i].TextFieldName);
+                fieldSearchPattern += string.Format(singleFieldPattern, fieldInformations[i].FieldName);
                 if (i < fieldInformations.Length - 1) fieldSearchPattern += "|";
             }
             fieldSearchPattern += ")";
 
-            // Debug.Log($"{fieldSearchPattern}");
+            Debug.Log($"{fieldSearchPattern}");
 
             return new Regex(fieldSearchPattern);
         }
@@ -420,173 +413,7 @@ namespace FabulousReplacer
             return new Regex(expression);
         }
 
-        /* 
-        * This method can only work guaranteed the script files follow convention of being named the
-        * same as the class they contain.
-        TODO Something should be done about the possibility of partial classes
-        TODO Apparently not much can be done:
-        https://stackoverflow.com/questions/10960071/how-to-find-path-to-cs-file-by-its-type-in-c-sharp
-        */
-        private static string GetScriptFilePath(Type monoType)
-        {
-            string scriptFileName = monoType.Name;
-            string[] assets = AssetDatabase.FindAssets($"{scriptFileName} t:MonoScript");
-
-            string selectedAsset = null;
-
-            if (assets.Length != 1)
-            {
-                foreach (string asset in assets)
-                {
-                    string assetPath = AssetDatabase.GUIDToAssetPath(asset);
-
-                    if (assetPath.Contains($"{scriptFileName}.cs"))
-                    {
-                        selectedAsset = asset;
-                        Debug.Log($"From overlapping selections chose: {assetPath}");
-                    }
-                }
-            }
-            else
-            {
-                selectedAsset = assets[0];
-            }
-
-            var path = AssetDatabase.GUIDToAssetPath(selectedAsset);
-            return path;
-        }
-
-        [Obsolete]
-        private static Regex GetClassRxPfffff(FieldInformation fieldInformation)
-        {
-            string classPattern = null;
-            FieldType fieldType = fieldInformation.FieldType;
-
-            if (fieldType.HasFlag(FieldType.Nested))
-            {
-                Regex nestedClassRx = new Regex($@"\b\+\w+\b");
-                string nestedClassName = nestedClassRx.Match(fieldInformation.FieldDefiningType.Name).Value;
-                nestedClassName = nestedClassName.TrimStart('+');
-
-                if (string.IsNullOrWhiteSpace(nestedClassName))
-                {
-                    Debug.LogError($"Failed to find nested class name for {fieldInformation.FieldDefiningType.Name}");
-                }
-
-                Debug.Log($"<color=yellow>{nestedClassName}</color>");
-                classPattern = $@"\bclass\s+{nestedClassName}\b";
-            }
-            else
-            {
-                classPattern = $@"\bclass\s+{fieldInformation.FieldDefiningType.Name}\b";
-            }
-
-            return null;
-        }
-
-        // OuterClass+NestedClass
-
-        [Obsolete]
-        private static List<string> GetUpdatedScriptLines(string scriptPath, Type monoType, List<string> fieldNames)
-        {
-            List<string> finalScriptLines = new List<string>();
-
-            try
-            {
-                //bool foundTmProUsings = false;
-                bool foundClassOpening = false;
-                bool foundClassDeclaration = false;
-                bool insertedReplacerCode = false;
-
-                // TODO that check shouldn't be here
-                if (scriptPath.Contains(".cs") == false)
-                {
-                    Debug.LogError($"path does not point to a script file: {scriptPath}");
-                }
-
-                //TODO add check if script already imports TMPro
-                finalScriptLines.Add("using TMPro;");
-
-                using (var reader = new StreamReader(scriptPath))
-                {
-                    string line;
-
-                    string classPattern = $@"\bclass\s+{monoType.Name}\b";
-                    Regex classRx = new Regex(classPattern); //GetClassRx() //todo requires field infomration
-
-                    string classOpenPattern = @"\{";
-                    string indentationPattern = @"^\s+";
-                    string tmProUsingsPattern = @"using\s+TMPro;";
-
-                    //TODO omg what if there is a List of Text components somewhere in zula?
-                    //* Hehe, there 'is' or rather 'are' and yes they are completely undalndled
-                    //* Just the same with nested classes
-                    string fieldSearchPattern = @"(";
-                    for (int i = 0; i < fieldNames.Count; i++)
-                    {
-                        fieldSearchPattern += $@"\sText\s+{fieldNames[i]};";
-                        if (i < fieldNames.Count - 1) fieldSearchPattern += "|";
-                    }
-                    fieldSearchPattern += ")";
-
-                    Regex classOpenRx = new Regex(classOpenPattern);
-                    Regex indentRx = new Regex(indentationPattern);
-                    Regex tmProUsingsRx = new Regex(tmProUsingsPattern);
-                    Regex fieldSearchRx = new Regex(fieldSearchPattern);
-
-                    while ((line = reader.ReadLine()) != null)
-                    {
-                        if (classRx.IsMatch(line))
-                        {
-                            foundClassDeclaration = true;
-                        }
-                        else if (foundClassDeclaration && classOpenRx.IsMatch(line))
-                        {
-                            foundClassOpening = true;
-                        }
-                        else if (!insertedReplacerCode && foundClassDeclaration && foundClassOpening)
-                        {
-                            Match indentation = indentRx.Match(line);
-
-                            finalScriptLines.Add(indentation.Value);
-                            finalScriptLines.Add($"{indentation.Value}#region Autogenerated UnityEngine.Text replacer code");
-                            finalScriptLines.Add($"{indentation.Value}/* please don't edit or rename those fields */");
-                            finalScriptLines.Add($"{indentation.Value}private const string ADAPTERS_PARENT_NAME = \"{String.Format(ADAPTER_PARENT_NAME, monoType.Name)}\";");
-                            finalScriptLines.Add($"{indentation.Value}[Header(\"{monoType.Name} TextMeshPro Fields\")]");
-
-                            foreach (var fieldName in fieldNames)
-                            {
-                                IEnumerable<string> lines = GetAdapterTemplate(fieldName);
-                                finalScriptLines.AddRange(lines);
-                            }
-
-                            finalScriptLines.Add($"{indentation.Value}/* fin */");
-                            finalScriptLines.Add($"{indentation.Value}#endregion // Autogenerated UnityEngine.Text replacer code ");
-                            finalScriptLines.Add(indentation.Value);
-
-                            insertedReplacerCode = true;
-                        }
-
-                        if (fieldSearchRx.IsMatch(line))
-                        {
-                            // We just want to skip the original field declaration line
-                            continue;
-                        }
-                        else
-                        {
-                            finalScriptLines.Add(line);
-                        }
-                    }
-                }
-            }
-            catch (IOException e)
-            {
-                Debug.LogError("The file could not be read:");
-                Debug.LogError(e.Message);
-            }
-
-            return finalScriptLines;
-        }
+        
 
         private static void SaveUpdateScript(string path, List<string> lines)
         {
@@ -608,9 +435,53 @@ namespace FabulousReplacer
             }
         }
 
-        private static List<string> GetAdapterTemplate(string fileName)
+        private static List<string> GetTemplateLines(FieldType fieldsType, FieldInformation[] fieldInformations)
         {
-            FileStream stream = new FileStream("Packages/com.mariaheineboombyte.fabulous-text-replacer/Editor/Templates/ShortAdapterTemplate.txt", FileMode.Open);
+            var templateLines = new List<string>();
+
+            foreach (var fieldInformation in fieldInformations)
+            {
+                IEnumerable<string> lines = GetAdapterTemplate(fieldInformation.FieldName, fieldsType);
+                templateLines.AddRange(lines);
+            }
+
+            return templateLines;
+        }
+
+        private const string STANDARD_TEMPLATE = "StandardAdapterTemplate";
+        private const string LISTED_TEMPLATE = "ListedAdapterTemplate";
+        private const string ARRAYED_TEMPLATE = "ArrayedAdapterTemplate";
+
+        private static List<string> GetAdapterTemplate(string fileName, FieldType fieldType)
+        {
+            FileStream stream = null;
+
+            string templatePath = null;
+
+            if (fieldType == FieldType.Direct || fieldType == FieldType.Nested || fieldType == FieldType.External)
+            {
+                templatePath = $"Packages/com.mariaheineboombyte.fabulous-text-replacer/Editor/Templates/{STANDARD_TEMPLATE}.txt";
+            }
+            else if (fieldType.HasFlag(FieldType.Arrayed))
+            {
+                templatePath = $"Packages/com.mariaheineboombyte.fabulous-text-replacer/Editor/Templates/{ARRAYED_TEMPLATE}.txt";
+            }
+            else if (fieldType.HasFlag(FieldType.Listed))
+            {
+                templatePath = $"Packages/com.mariaheineboombyte.fabulous-text-replacer/Editor/Templates/{LISTED_TEMPLATE}.txt";
+            }
+            else
+            {
+                Debug.LogError($"Unhandled field type: {fieldType}");
+
+            }
+
+            stream = new FileStream(templatePath, FileMode.Open);
+
+            if (stream == null)
+            {
+                Debug.LogError($"Failed to create template file streamfor path: {templatePath}");
+            }
 
             string line;
             List<string> templateLines = new List<string>();

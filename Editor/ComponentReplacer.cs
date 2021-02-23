@@ -13,13 +13,15 @@ using System.Text.RegularExpressions;
 using System.Text;
 using UnityEngine.UI;
 using UnityEditor.UIElements;
+using System.Reflection;
+using System.Linq;
 
 namespace FabulousReplacer
 {
     public class ComponentReplacer
     {
         private const string ADAPTER_PARENT_NAME = "{0}_TextAdaptersParent";
-        private const string ADAPTER_GAMEOBJECT_NAME = "{0}_TMProAdapter";
+        private const string ADAPTER_GAMEOBJECT_NAME = "TMProAdapter_{0}";
 
         UpdatedReferenceAddressBook _updatedReferenceAddressBook;
         TMP_FontAsset fontAsset;
@@ -40,6 +42,16 @@ namespace FabulousReplacer
 
         private void RunReplaceLogic()
         {
+            // foreach (var reference in _updatedReferenceAddressBook)
+            // {
+            //     List<ReplaceUnit> referenceGroup = reference.Value;
+
+            //     foreach (ReplaceUnit replaceUnit in referenceGroup)
+            //     {
+            //         ReplaceTextComponent(replaceUnit);
+            //     }
+            // }
+
             try
             {
                 AssetDatabase.StartAssetEditing();
@@ -83,65 +95,14 @@ namespace FabulousReplacer
             {
                 GameObject root = editScope.prefabRoot;
                 TextMeshProUGUI tmProText = GetTMProText(updatedReference, textInfo, root);
-                TMProAdapter tmProAdapter = CreateTextAdapter(updatedReference, root, tmProText);
                 StyleTMProText(textInfo, tmProText);
-                AssignTMProReference(updatedReference, tmProAdapter, root);
-            }
-        }
 
-        private void AssignTMProReference(ReplaceUnit reference, TMProAdapter tmProAdapter, GameObject root)
-        {
-            if (reference.isReferenced)
-            {
-                if (tmProAdapter == null)
+                if (updatedReference.isReferenced)
                 {
-                    Debug.LogError($"Adapter is null for {reference.prefabPath} field {reference.fieldName}");
-                }
-
-                Type type = Type.GetType(reference.monoAssemblyName);
-
-                Component mono = FabulousExtensions
-                    .GetGameObjectAtAddress(root, reference.MonoAddress)
-                    .GetComponent(type);
-
-                if (mono == null)
-                {
-                    Debug.LogError($"Failed to find mono by its address for prefab: {root} at path {reference.prefabPath}");
-                    return;
-                }
-
-                foreach (var field in type.GetFields(ReferenceFinder.FIELD_SEARCH_FLAGS))
-                {
-                    if (field.Name == $"{reference.fieldName}TMPro")
-                    {
-                        field.SetValue(mono, tmProAdapter.TMProText);
-                    }
-                    else if (field.Name == $"{reference.fieldName}")
-                    {
-                        field.SetValue(mono, tmProAdapter);
-                    }
+                    TMProAdapter tmProAdapter = CreateTextAdapter(updatedReference, root, tmProText);
+                    AssignTMProReference(updatedReference, tmProAdapter, root);
                 }
             }
-        }
-
-        private void StyleTMProText(TextInformation textInfo, TextMeshProUGUI tmProText)
-        {
-            tmProText.text = textInfo.Text;
-            tmProText.alignment = textInfo.TMProAlignment;
-            tmProText.font = fontAsset;
-            tmProText.fontSize = (float)textInfo.FontSize;
-            tmProText.color = textInfo.FontColor;
-            tmProText.enableWordWrapping = true;
-
-            // TODO oki that is a small hack
-            // using original font size as max size and always enabling auto sizing
-            tmProText.fontSizeMax = textInfo.FontSize;
-            //newText.enableAutoSizing = textInfo.AutoSize;
-            tmProText.enableAutoSizing = true;
-
-            tmProText.fontSizeMin = textInfo.MinSize;
-            tmProText.richText = textInfo.IsRichText;
-            tmProText.characterSpacing = -1.1f;
         }
 
         private static TextMeshProUGUI GetTMProText(ReplaceUnit updatedReference, TextInformation textInfo, GameObject root)
@@ -165,6 +126,11 @@ namespace FabulousReplacer
                     .GetComponent<TextMeshProUGUI>();
             }
 
+            if (newText == null)
+            {
+                Debug.LogError($"TMPro text component is null");
+            }
+
             return newText;
         }
 
@@ -172,47 +138,241 @@ namespace FabulousReplacer
         {
             TMProAdapter adapter = null;
 
-            if (updatedReference.isReferenced)
+            string fieldOwnerName = updatedReference.fieldInformation.FieldOwnerType.Name;
+            string adapterParentName = String.Format(ADAPTER_PARENT_NAME, fieldOwnerName);
+
+            GameObject adaptersParent = GetAdaptersParent(root, adapterParentName);
+            adapter = GetAdapter(updatedReference, newTextComponent, adaptersParent);
+
+            return adapter;
+        }
+        private static GameObject GetAdaptersParent(GameObject root, string adapterParentName)
+        {
+            GameObject adaptersParent;
+            Transform adaptersParentTransform = root.transform.Find(adapterParentName);
+
+            if (adaptersParentTransform == null)
             {
-                string monoTypeShortName = Type
-                    .GetType(updatedReference.monoAssemblyName)
-                    .Name;
+                adaptersParent = new GameObject(adapterParentName);
+                adaptersParent.transform.parent = root.transform;
+                adaptersParent.transform.SetAsLastSibling(); // * this is important because "adressing" part of the algorithm counts children index
+                adaptersParent.AddComponent<TMProAdapterParent>();
+            }
+            else
+            {
+                adaptersParent = adaptersParentTransform.gameObject;
+            }
 
-                string adapterParentName = String.Format(ADAPTER_PARENT_NAME, monoTypeShortName);
-                Transform adaptersParentTransform = root.transform.Find(adapterParentName);
+            return adaptersParent;
+        }
 
-                GameObject adaptersParent = null;
-                if (adaptersParentTransform == null)
-                {
-                    adaptersParent = new GameObject(adapterParentName);
-                    adaptersParent.transform.parent = root.transform;
-                    adaptersParent.transform.SetAsLastSibling(); // * this is important because "adressing" part of the algorithm counts children index
-                    adaptersParent.AddComponent<TMProAdapterParent>();
-                }
-                else
-                {
-                    adaptersParent = adaptersParentTransform.gameObject;
-                }
+        private static TMProAdapter GetAdapter(ReplaceUnit updatedReference, TextMeshProUGUI newTextComponent, GameObject adaptersParent)
+        {
+            TMProAdapter adapter;
+            string fieldName = GetAdapterGameObjectName(updatedReference.fieldInformation);
+            string adapterName = String.Format(ADAPTER_GAMEOBJECT_NAME, fieldName);
 
-                string adapterGameobjectName = String.Format(ADAPTER_GAMEOBJECT_NAME, updatedReference.fieldName);
+            Transform adapterTransform = adaptersParent.transform.Find(adapterName);
 
-                Transform adapterTransform = adaptersParent.transform.Find(adapterGameobjectName);
+            if (adapterTransform == null)
+            {
+                adapter = CreateNewAdapter(newTextComponent, adaptersParent, fieldName, adapterName);
+            }
+            else
+            {
+                Debug.LogError($"Dos that ever happen and should it even, maybe in case of repeated reference");
 
-                if (adapterTransform == null)
-                {
-                    GameObject adapterGO = new GameObject(adapterGameobjectName);
-                    adapterGO.transform.parent = adaptersParent.transform;
-                    adapter = adapterGO.AddComponent<TMProAdapter>();
-                    adapter.SetupAdapter(updatedReference.fieldName, newTextComponent);
-                }
-                else
-                {
-                    //TODO add version with FieldInformation
-                    adapter = adaptersParent.GetComponent<TMProAdapterParent>()[updatedReference.fieldName];
-                }
+                //TODO add version with FieldInformation
+                adapter = adaptersParent.GetComponent<TMProAdapterParent>()[fieldName];
             }
 
             return adapter;
+        }
+
+        private static TMProAdapter CreateNewAdapter(TextMeshProUGUI newTextComponent, GameObject adaptersParent, string fieldName, string adapterGameobjectName)
+        {
+            TMProAdapter adapter;
+            GameObject adapterGO = new GameObject(adapterGameobjectName);
+            adapterGO.transform.parent = adaptersParent.transform;
+            adapter = adapterGO.AddComponent<TMProAdapter>();
+            adapter.SetupAdapter(fieldName, newTextComponent);
+            return adapter;
+        }
+
+        private static string GetAdapterGameObjectName(FieldInformation fieldInformation)
+        {
+            string adapterName = "";
+
+            if (fieldInformation.FieldType.HasOneOfTheFlags(FieldType.Nested | FieldType.External))
+            {
+                var eofi = fieldInformation.GetFieldInformationParamter<ExternallyOwnedFieldInformation>();
+
+                adapterName += $"{eofi.fieldInformation.FieldName}_";
+
+                if (eofi.fieldInformation.FieldType.HasOneOfTheFlags(FieldType.Arrayed | FieldType.Listed))
+                {
+                    var efi = eofi.fieldInformation.GetFieldInformationParamter<EnumerableFieldInformation>();
+                    adapterName += $"i{efi.index}_";
+                }
+            }
+
+            adapterName += fieldInformation.FieldName;
+
+            if (fieldInformation.FieldType.HasOneOfTheFlags(FieldType.Arrayed | FieldType.Listed))
+            {
+                adapterName += $"_i{fieldInformation.GetFieldInformationParamter<EnumerableFieldInformation>().index}";
+            }
+
+            return adapterName;
+        }
+
+        private void AssignTMProReference(ReplaceUnit reference, TMProAdapter tmProAdapter, GameObject root)
+        {
+            if (tmProAdapter == null)
+            {
+                Debug.LogError($"Adapter is null for {reference.prefabPath} field {reference.fieldName}");
+            }
+
+            object fieldOwner = GetFieldOwner(reference, root);
+
+            GetAdapterAndTmproFieldInfos(
+                reference.fieldInformation,
+                out FieldInfo adapterFieldInfo,
+                out FieldInfo tmProFieldInfo);
+
+            SetAdapterAndTMProFieldValues(tmProAdapter, reference, fieldOwner, adapterFieldInfo, tmProFieldInfo);
+        }
+
+        private static object GetFieldOwner(ReplaceUnit replaceUnit, GameObject root)
+        {
+            object fieldOwner = null;
+            FieldInformation fieldInformation = replaceUnit.fieldInformation;
+
+            Type monoType = fieldInformation.FieldOwnerType;
+            Component mono = FabulousExtensions
+                .GetGameObjectAtAddress(root, replaceUnit.MonoAddress)
+                .GetComponent(monoType);
+
+            if (mono == null)
+            {
+                throw new NullReferenceException($"Failed to find mono by its address for prefab: {root} at path {replaceUnit.prefabPath}");
+            }
+
+            if (fieldInformation.FieldType.HasOneOfTheFlags(FieldType.Nested | FieldType.External))
+            {
+                ExternallyOwnedFieldInformation eofi = fieldInformation.GetFieldInformationParamter<ExternallyOwnedFieldInformation>();
+
+                FieldInfo externalObjectFieldInfo = monoType.GetField(eofi.ExternalOwnerFieldName, ReferenceFinder.GENEROUS_NONSTATIC_FIELD_SEARCH_FLAGS);
+
+                if (eofi.fieldInformation.FieldType.HasOneOfTheFlags(FieldType.Arrayed | FieldType.Listed))
+                {
+                    var efi = eofi.fieldInformation.GetFieldInformationParamter<EnumerableFieldInformation>();
+                    IEnumerable enumberableOwner = (IEnumerable)externalObjectFieldInfo.GetValue(mono);
+
+                    int index = 0;
+                    foreach (var item in enumberableOwner)
+                    {
+                        if (index == efi.index)
+                        {
+                            fieldOwner = item;
+                        }
+                        index++;
+                    }
+                }
+                else
+                {
+                    fieldOwner = externalObjectFieldInfo.GetValue(mono);
+                }
+            }
+            else
+            {
+                fieldOwner = mono;
+            }
+
+            return fieldOwner;
+        }
+
+        private static void SetAdapterAndTMProFieldValues(TMProAdapter tmProAdapter, ReplaceUnit replaceUnit, object fieldOwner, FieldInfo adapterFieldInfo, FieldInfo tmProFieldInfo)
+        {
+            FieldInformation fieldInformation = replaceUnit.fieldInformation;
+            FieldType fieldType = fieldInformation.FieldType;
+
+            if (fieldType.HasOneOfTheFlags(FieldType.Listed | FieldType.Arrayed))
+            {
+                var adpaterField = adapterFieldInfo.GetValue(fieldOwner);
+                var tmProField = tmProFieldInfo.GetValue(fieldOwner);
+
+                EnumerableFieldInformation efi = fieldInformation.GetFieldInformationParamter<EnumerableFieldInformation>();
+
+                if (adpaterField != null && tmProField != null)
+                {
+                    if (adpaterField is List<TMProAdapter> adapterList)
+                    {
+                        adapterList[efi.index] = tmProAdapter;
+                        (tmProField as List<TextMeshProUGUI>).Add(tmProAdapter.TMProText);
+                    }
+                    else if (adpaterField is TMProAdapter[] adapterArray)
+                    {
+                        adapterArray[efi.index] = tmProAdapter;
+
+                        //* We don't need to do the same with above adapterArray since it already has the correct size as it
+                        //* replaced the old array of text components
+                        TextMeshProUGUI[] tmproFieldArray = tmProField as TextMeshProUGUI[];
+                        TextMeshProUGUI[] newTMProFieldArray = new TextMeshProUGUI[tmproFieldArray.Length + 1];
+                        tmproFieldArray.CopyTo(newTMProFieldArray, 0);
+                        newTMProFieldArray[tmproFieldArray.Length] = tmProAdapter.TMProText;
+                        tmProFieldInfo.SetValue(fieldOwner, newTMProFieldArray);
+                    }
+                    else
+                    {
+                        Debug.LogError($"Huh? Thats weird");
+                    }
+                }
+                else
+                {
+                    Debug.LogError($"Either adapter field: {adpaterField} or tmpro field: {tmProField} is null.");
+                }
+            }
+            else
+            {
+                adapterFieldInfo.SetValue(fieldOwner, tmProAdapter);
+                tmProFieldInfo.SetValue(fieldOwner, tmProAdapter.TMProText);
+            }
+        }
+
+        private static void GetAdapterAndTmproFieldInfos(
+            FieldInformation fieldInformation,
+            out FieldInfo adapterFieldInfo,
+            out FieldInfo tmProFieldInfo)
+        {
+            Type type = Type.GetType(fieldInformation.FieldDefiningTypeAssemblyName);
+            adapterFieldInfo = type.GetField(fieldInformation.FieldName, ReferenceFinder.GENEROUS_NONSTATIC_FIELD_SEARCH_FLAGS);
+            tmProFieldInfo = type.GetField($"{fieldInformation.FieldName}TMPro", ReferenceFinder.GENEROUS_NONSTATIC_FIELD_SEARCH_FLAGS);
+
+            if (adapterFieldInfo == null || tmProFieldInfo == null)
+            {
+                Debug.Log($"Either adapterFieldinfo: {adapterFieldInfo} or tmprofieldinfo: {tmProFieldInfo} is still null");
+            }
+        }
+
+        private void StyleTMProText(TextInformation textInfo, TextMeshProUGUI tmProText)
+        {
+            tmProText.text = textInfo.Text;
+            tmProText.alignment = textInfo.TMProAlignment;
+            tmProText.font = fontAsset;
+            tmProText.fontSize = (float)textInfo.FontSize;
+            tmProText.color = textInfo.FontColor;
+            tmProText.enableWordWrapping = true;
+
+            // TODO oki that is a small hack
+            // using original font size as max size and always enabling auto sizing
+            tmProText.fontSizeMax = textInfo.FontSize;
+            //newText.enableAutoSizing = textInfo.AutoSize;
+            tmProText.enableAutoSizing = true;
+
+            tmProText.fontSizeMin = textInfo.MinSize;
+            tmProText.richText = textInfo.IsRichText;
+            tmProText.characterSpacing = -1.1f;
         }
 
         #endregion // TEXT COMPONENT REPLACEMENT

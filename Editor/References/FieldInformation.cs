@@ -25,82 +25,106 @@ namespace FabulousReplacer
     public class FieldInformation
     {
         [SerializeField] FieldType fieldType;
-        [SerializeField] string textFieldName;
-        [SerializeField] Type fieldOwnerType;
-        [SerializeField] string fieldOwnerAssemblyName;
+        [SerializeField] string fieldName;
+        [SerializeField] string fieldDefiningTypeAssemblyName;
         [SerializeField] public List<FieldInformationParamter> fieldInformationParamters = new List<FieldInformationParamter>(5);
+        // [SerializeField] FieldInformation fieldParent; // * This is how it should be done but there is no time for that
 
         public FieldType FieldType { get => fieldType; set => fieldType = value; }
-        public string TextFieldName { get => textFieldName; set => textFieldName = value; }
-        public string FieldOwnerAssemblyName => fieldOwnerAssemblyName;
+        public string FieldName { get => fieldName; set => fieldName = value; }
+        public string FieldDefiningTypeAssemblyName => fieldDefiningTypeAssemblyName;
+        // public FieldInformation FieldParent => fieldParent;
 
         public Type FieldDefiningType
         {
             get
             {
-                if (fieldOwnerType == null)
-                {
-                    fieldOwnerType = Type.GetType(fieldOwnerAssemblyName);
-                }
-
-                return fieldOwnerType;
+                return Type.GetType(fieldDefiningTypeAssemblyName);
             }
             set
             {
                 if (value == null)
                 {
-                    Debug.LogError($"What are u even doing, keeping: {fieldOwnerAssemblyName}.");
+                    Debug.LogError($"What are u even doing, keeping: {fieldDefiningTypeAssemblyName}");
                 }
                 else
                 {
-                    fieldOwnerAssemblyName = value.AssemblyQualifiedName;
-                    fieldOwnerType = value;
+                    fieldDefiningTypeAssemblyName = value.AssemblyQualifiedName;
                 }
             }
         }
 
+        //* In case of nested or external classes I assume the "owner" of the text field to be different than the class
+        //* that defined that field
         public Type FieldOwnerType
         {
             get
             {
-                if (FieldType.HasFlag(FieldType.Nested))
+                if (fieldType.HasOneOfTheFlags(FieldType.Nested | FieldType.External))
                 {
                     ExternallyOwnedFieldInformation eofi = GetFieldInformationParamter<ExternallyOwnedFieldInformation>();
                     return Type.GetType(eofi.ExternalOwnerAssemblyName);
                 }
-                else return FieldDefiningType;
+                else
+                {
+                    return FieldDefiningType;
+                }
             }
         }
 
-        public T GetFieldInformationParamter<T>() where T : FieldInformationParamter
+        // public T GetFieldInformationParamter<T>() where T : FieldInformationParamter
+        public T GetFieldInformationParamter<T>()
         {
             foreach (var param in fieldInformationParamters)
             {
-                if (param is T)
+                if (param is T paramT)
                 {
-                    return param as T;
+                    return paramT;
+                }
+                else
+                {
+                    Debug.Log($"{param.GetType()}");
+                    Debug.Log($"{param.Signature}");
                 }
             }
 
-            return null;
+            Debug.LogError($"Failed to find FieldInformationParamter of type {typeof(T)}");
+
+            return default(T);
         }
 
-        public FieldInformation(Type declaringClassType)
+        public FieldInformation(Type fieldDefiningType)
         {
-            this.FieldDefiningType = declaringClassType;
+            this.FieldDefiningType = fieldDefiningType;
         }
 
         public FieldInformation(string textFieldName, Type declaringClassType)
         {
-            this.textFieldName = textFieldName;
-            this.fieldOwnerType = declaringClassType;
+            this.fieldName = textFieldName;
+            this.FieldDefiningType = declaringClassType;
+
             //! This requires checking and probably should be handled somewhere else
             this.FieldDefiningType = GetFieldDeclaringType(declaringClassType, textFieldName);
         }
 
+        ~FieldInformation()
+        {
+            if (fieldInformationParamters == null) return;
+
+            for (int i = fieldInformationParamters.Count - 1; i >= 0 ; i--)
+            {
+                UnityEngine.Object.DestroyImmediate(fieldInformationParamters[i]);
+            }
+        }
+
         public void AddFieldInformationParameter(FieldInformationParamter fieldInformationParamter)
         {
-            if (fieldInformationParamters == null) fieldInformationParamters = new List<FieldInformationParamter>();
+            if (fieldInformationParamters == null)
+            {
+                fieldInformationParamters = new List<FieldInformationParamter>();
+            }
+
+            fieldInformationParamter.UpdateSignature();
             fieldInformationParamters.Add(fieldInformationParamter);
         }
     }
@@ -115,8 +139,8 @@ namespace FabulousReplacer
                 return false;
             else if (
                 x.FieldType == y.FieldType &&
-                x.FieldOwnerAssemblyName == y.FieldOwnerAssemblyName &&
-                x.TextFieldName == y.TextFieldName &&
+                x.FieldDefiningTypeAssemblyName == y.FieldDefiningTypeAssemblyName &&
+                x.FieldName == y.FieldName &&
                 x.fieldInformationParamters.Count == y.fieldInformationParamters.Count &&
                 x.fieldInformationParamters.SequenceEqual(y.fieldInformationParamters, new FieldInformationParamterEqualityComparer())
             )
@@ -138,8 +162,8 @@ namespace FabulousReplacer
 
             var sb = new StringBuilder();
             sb.Append(obj.FieldType.ToString());
-            sb.Append(obj.FieldOwnerAssemblyName);
-            sb.Append(obj.TextFieldName);
+            sb.Append(obj.FieldDefiningTypeAssemblyName);
+            sb.Append(obj.FieldName);
             if (obj.fieldInformationParamters != null)
             {
                 foreach (var fieldInformationParamter in obj.fieldInformationParamters)
@@ -179,8 +203,7 @@ namespace FabulousReplacer
     }
 
 
-    [Serializable]
-    public class FieldInformationParamter
+    public class FieldInformationParamter : ScriptableObject 
     {
         [Multiline, SerializeField] protected string signature;
 
@@ -189,21 +212,26 @@ namespace FabulousReplacer
         public virtual void UpdateSignature() { }
     }
 
-    [Serializable]
     public class EnumerableFieldInformation : FieldInformationParamter
     {
         //* Index in the array or a list 
         public int index;
         public int length;
+
+        public override void UpdateSignature()
+        {
+            signature += "index" + index + "\n";
+            signature += "length" + length + "\n";
+        }
     }
 
-    [Serializable]
     public class ExternallyOwnedFieldInformation : FieldInformationParamter
     {
         //* Name of a nested class that holds the field with Text component
         public Type ExternalOwnerType;
         public string ExternalOwnerAssemblyName;
         public string ExternalOwnerFieldName;
+        public FieldInformation fieldInformation;
 
         public override void UpdateSignature()
         {

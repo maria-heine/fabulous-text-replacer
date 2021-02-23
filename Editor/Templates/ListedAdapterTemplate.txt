@@ -1,0 +1,5 @@
+
+// field: {0} 
+[SerializeField] private List<TextMeshProUGUI> {0}TMPro;
+[SerializeField] public List<TMProAdapter> {0};
+//[SerializeField, HideInInspector] public List<TMProAdapter> {0};
