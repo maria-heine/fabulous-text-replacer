@@ -1,20 +1,13 @@
-using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.UIElements;
 using UnityEditor;
-using Unity.EditorCoroutines.Editor;
 using UnityEditor.Compilation;
-using TMPro;
 using Button = UnityEngine.UIElements.Button;
 using System;
 using System.IO;
 using System.Text.RegularExpressions;
 using System.Text;
-using UnityEngine.UI;
-using UnityEditor.UIElements;
 using System.Linq;
-using System.Reflection;
 
 namespace FabulousReplacer
 {
@@ -75,7 +68,7 @@ namespace FabulousReplacer
         {
             if (reference.isReferenced)
             {
-                Type definingType = reference.fieldInformation.FieldDefiningType;
+                Type definingType = reference.fieldInformation.FieldDeclaringType;
                 FieldInformation fieldInformation = reference.fieldInformation;
 
                 if (!_fieldsToUpdateByFieldOwnerType.ContainsKey(definingType))
@@ -116,14 +109,11 @@ namespace FabulousReplacer
 
                     if (!scriptLinesByPath.ContainsKey(path))
                     {
-                        Debug.Log($"{fieldType} NULL script lines ");
-
                         scriptLinesByPath.Add(path, new List<string>());
                         scriptLinesByPath[path] = GetUpdatedScriptLines(path, fieldDefiningType, fieldType, distinctTextFieldInformations);
                     }
                     else
                     {
-                        Debug.Log($"{fieldType} Not null script lines ");
                         scriptLinesByPath[path] = GetUpdatedScriptLines(scriptLinesByPath[path], fieldType, distinctTextFieldInformations);
                     }
                 }
@@ -155,7 +145,7 @@ namespace FabulousReplacer
             //* Below is a bold assumbtion that healthy standards of defining a matching file name with the class it contains
             if (fieldType.HasFlag(FieldType.External))
             {
-                scriptFileName = fieldInformation.FieldDefiningType.Name;
+                scriptFileName = fieldInformation.FieldDeclaringType.Name;
             }
             else
             {
@@ -164,8 +154,7 @@ namespace FabulousReplacer
 
             string[] assets = AssetDatabase.FindAssets($"{scriptFileName} t:MonoScript");
 
-            Debug.Log($"{scriptFileName}");
-
+            // Debug.Log($"{scriptFileName}");
 
             string selectedAsset = null;
 
@@ -178,7 +167,7 @@ namespace FabulousReplacer
                     if (assetPath.Contains($"{scriptFileName}.cs"))
                     {
                         selectedAsset = asset;
-                        Debug.Log($"From overlapping selections chose: {assetPath}");
+                        // Debug.Log($"From overlapping selections chose: {assetPath}");
                     }
                 }
             }
@@ -189,7 +178,7 @@ namespace FabulousReplacer
 
             var path = AssetDatabase.GUIDToAssetPath(selectedAsset);
 
-            Debug.Log($"{path}");
+            // Debug.Log($"{path}");
 
             return path;
         }
@@ -338,12 +327,12 @@ namespace FabulousReplacer
                 }
             }
 
-            string asd = "";
-            foreach (var item in finalScriptLines)
-            {
-                asd += item + "\n";
-            }
-            Debug.Log($"{asd}");
+            // string asd = "";
+            // foreach (var item in finalScriptLines)
+            // {
+            //     asd += item + "\n";
+            // }
+            // Debug.Log($"{asd}");
 
             return finalScriptLines;
         }
@@ -401,14 +390,14 @@ namespace FabulousReplacer
             }
             fieldSearchPattern += ")";
 
-            Debug.Log($"{fieldSearchPattern}");
+            // Debug.Log($"{fieldSearchPattern}");
 
             return new Regex(fieldSearchPattern);
         }
 
         private static Regex GetClass(FieldInformation fieldInformation)
         {
-            string className = fieldInformation.FieldDefiningType.Name;
+            string className = fieldInformation.FieldDeclaringType.Name;
             string expression = $@"\bclass\s+{className}\b";
             return new Regex(expression);
         }

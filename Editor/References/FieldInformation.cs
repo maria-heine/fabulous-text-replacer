@@ -26,30 +26,30 @@ namespace FabulousReplacer
     {
         [SerializeField] FieldType fieldType;
         [SerializeField] string fieldName;
-        [SerializeField] string fieldDefiningTypeAssemblyName;
+        [SerializeField] string fieldDeclaringTypeAssemblyName;
         [SerializeField] public List<FieldInformationParamter> fieldInformationParamters = new List<FieldInformationParamter>(5);
         // [SerializeField] FieldInformation fieldParent; // * This is how it should be done but there is no time for that
 
         public FieldType FieldType { get => fieldType; set => fieldType = value; }
         public string FieldName { get => fieldName; set => fieldName = value; }
-        public string FieldDefiningTypeAssemblyName => fieldDefiningTypeAssemblyName;
+        public string FieldDefiningTypeAssemblyName => fieldDeclaringTypeAssemblyName;
         // public FieldInformation FieldParent => fieldParent;
 
-        public Type FieldDefiningType
+        public Type FieldDeclaringType
         {
             get
             {
-                return Type.GetType(fieldDefiningTypeAssemblyName);
+                return Type.GetType(fieldDeclaringTypeAssemblyName);
             }
             set
             {
                 if (value == null)
                 {
-                    Debug.LogError($"What are u even doing, keeping: {fieldDefiningTypeAssemblyName}");
+                    Debug.LogError($"What are u even doing, keeping: {fieldDeclaringTypeAssemblyName}");
                 }
                 else
                 {
-                    fieldDefiningTypeAssemblyName = value.AssemblyQualifiedName;
+                    fieldDeclaringTypeAssemblyName = value.AssemblyQualifiedName;
                 }
             }
         }
@@ -67,24 +67,18 @@ namespace FabulousReplacer
                 }
                 else
                 {
-                    return FieldDefiningType;
+                    return FieldDeclaringType;
                 }
             }
         }
 
-        // public T GetFieldInformationParamter<T>() where T : FieldInformationParamter
-        public T GetFieldInformationParamter<T>()
+        public T GetFieldInformationParamter<T>() where T : FieldInformationParamter
         {
             foreach (var param in fieldInformationParamters)
             {
                 if (param is T paramT)
                 {
                     return paramT;
-                }
-                else
-                {
-                    Debug.Log($"{param.GetType()}");
-                    Debug.Log($"{param.Signature}");
                 }
             }
 
@@ -93,18 +87,12 @@ namespace FabulousReplacer
             return default(T);
         }
 
-        public FieldInformation(Type fieldDefiningType)
-        {
-            this.FieldDefiningType = fieldDefiningType;
-        }
-
         public FieldInformation(string textFieldName, Type declaringClassType)
         {
             this.fieldName = textFieldName;
-            this.FieldDefiningType = declaringClassType;
 
             //! This requires checking and probably should be handled somewhere else
-            this.FieldDefiningType = GetFieldDeclaringType(declaringClassType, textFieldName);
+            this.FieldDeclaringType = GetFieldDeclaringType(declaringClassType, textFieldName);
         }
 
         ~FieldInformation()

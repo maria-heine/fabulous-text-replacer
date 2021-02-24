@@ -20,8 +20,6 @@ namespace FabulousReplacer
     are edited and reimported these references would point to some arbitrary "floating objects" 
     that are no longer directly connected to the prefabs they were created from. 
 
-    TODO Also naming for the class is terrible, more like ReplaceUnit
-
     * Depending whether the text component is referenced by scripts or not different fields will be null.
     * This is far from a clear code structure unfrortunately. 
 
@@ -29,15 +27,11 @@ namespace FabulousReplacer
     [Serializable]
     public class ReplaceUnit
     {
-        // todo solve the problem of one to many references for a text and monobehaviours
         [SerializeField] string rootPrefabName; // just for inspector display puroses
-        [SerializeField] string monoParentName;
         [SerializeField] string originalTextContent;
         public bool isReferenced;
         public GameObject rootPrefab;
         public string prefabPath;
-        public string fieldName;
-        public string monoAssemblyName;
         public Text originalText;
         public TextInformation textInformation;
         public FieldInformation fieldInformation;
@@ -94,34 +88,6 @@ namespace FabulousReplacer
 
         #endregion // Addressing
 
-        [SerializeField] Type monoType;
-
-        //! OBSOLETE
-        [Obsolete]
-        public Type MonoType
-        {
-            get
-            {
-                if (monoType == null)
-                {
-                    Debug.LogError($"{monoAssemblyName} Type is already null at {rootPrefabName}");
-                    monoType = Type.GetType(monoAssemblyName);
-                }
-                return monoType;
-            }
-            set
-            {
-                if (value == null)
-                {
-                    Debug.LogError($"What are u even doing, keeping: {monoAssemblyName}.");
-                }
-                else
-                {
-                    monoAssemblyName = value.AssemblyQualifiedName;
-                    monoType = value;
-                }
-            }
-        }
 
         //
         // ─── CONSTRUCTORS ────────────────────────────────────────────────
@@ -135,28 +101,12 @@ namespace FabulousReplacer
             isReferenced = false;
         }
 
-        // public ReplaceUnit(GameObject referencingPrefab, Text referencedText, MonoBehaviour referencingMono, string fieldName)
-        // {
-        //     SaveBaseData(referencingPrefab, referencedText);
-        //     isReferenced = true;
-
-        //     monoParentName = referencingMono.gameObject.name;
-        //     GetFieldReferencingType(referencingMono, fieldName);
-        //     MonoAddress = GetComponentAddressInHierarchy(referencingPrefab, referencingMono);
-        // }
-
         public ReplaceUnit(GameObject referencingPrefab, Text referencedText, MonoBehaviour referencingMono, FieldInformation fieldInformation)
         {
             SaveBaseData(referencingPrefab, referencedText);
             isReferenced = true;
 
             this.fieldInformation = fieldInformation;
-
-            monoParentName = referencingMono.gameObject.name;
-            //TODO Check this!
-            
-            //! MOVED THIS
-            // GetFieldReferencingType(referencingMono, fieldInformation.TextFieldName);
 
             MonoAddress = GetComponentAddressInHierarchy(referencingPrefab, referencingMono);
         }
@@ -172,13 +122,6 @@ namespace FabulousReplacer
             this.originalText = originalText;
             this.originalTextContent = originalText.text;
             TextAddress = GetComponentAddressInHierarchy(rootPrefab, originalText);
-        }
-
-        //! THAT WILL BE GLITCHED TOO
-        private void GetFieldReferencingType(MonoBehaviour mono, string fieldName)
-        {
-            this.MonoType = GetFieldDeclaringType(mono.GetType(), fieldName);
-            this.fieldName = fieldName;
         }
     }
 }

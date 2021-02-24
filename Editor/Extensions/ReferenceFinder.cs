@@ -78,8 +78,6 @@ namespace FabulousReplacer
                     {
                         List<T> list = field.GetValue(owner) as List<T>;
 
-                        // Debug.Log($"<color=yellow>{field.DeclaringType.GetField("someOtherString").GetValue(owner)} got a list {field.Name} of elements {list.Count}</color>");
-
                         if (list == null) continue;
 
                         foreach (T obj in list)
@@ -147,8 +145,6 @@ namespace FabulousReplacer
                 }
                 else if (field.FieldType.IsGenericType && field.FieldType.GetGenericTypeDefinition() == typeof(List<T>))
                 {
-                    // Debug.Log($"Found a list for {mono}, field {field.Name}");
-
                     List<T> list = field.GetValue(mono) as List<T>;
 
                     if (list == null) continue;
@@ -157,7 +153,6 @@ namespace FabulousReplacer
                     {
                         if (obj.GetType() == typeof(T))
                         {
-                            // Debug.Log($"Found a list for {mono}, field {field.Name}");
                             foundTFields.Add(field);
                         }
                     }
@@ -175,7 +170,12 @@ namespace FabulousReplacer
             return foundTFields.Count > 0;
         }
 
-        // public static bool IsReferencingComponentOfType<T>(this object someObject, T component, ref FieldInformation referencedFieldInformation)
+        // ::::::::::::::help me:::::
+        // ____.∧__∧:::::::::::::::::
+        // ___(<'º yº) =3 ::::::🖥️:::
+        // ___/　  ⌒ヽ⊃🍔 :::|===|::
+        // _🍷(人＿＿つ_つ.:::::|===|::
+        // ___FAT IS GOOD____________
         public static bool IsReferencingComponentOfType<T>(this object someObject, T component, ref List<FieldInformation> referencingFields)
             where T : Component
         {
@@ -190,9 +190,8 @@ namespace FabulousReplacer
                     {
                         Type fieldOwnerType = fieldOwner.GetType();
 
-                        fieldInformation = new FieldInformation(fieldOwnerType);
+                        fieldInformation = new FieldInformation(fieldInfo.Name, fieldOwnerType);
 
-                        fieldInformation.FieldName = fieldInfo.Name;
                         fieldInformation.FieldType = FieldType.Direct;
 
                         if (fieldInfo.FieldType.IsGenericType)
@@ -205,10 +204,7 @@ namespace FabulousReplacer
                                 EnumerableFieldInformation efi = ScriptableObject.CreateInstance<EnumerableFieldInformation>();
                                 efi.index = list.IndexOf(fieldValue);
                                 efi.length = list.Count;
-                                Debug.Log($"{efi.GetType()}");
-
                                 fieldInformation.AddFieldInformationParameter(efi);
-                                // Debug.Log($"<color=magenta>A listed field {fieldInformation.FieldType} {fieldInfo.Name} {fieldOwner.GetType()}</color>");
                             }
                         }
                         else if (fieldInfo.FieldType.IsArray)
@@ -220,7 +216,6 @@ namespace FabulousReplacer
                             efi.index = Array.IndexOf(array, fieldValue);
                             efi.length = array.Length;
                             fieldInformation.AddFieldInformationParameter(efi);
-                            // Debug.Log($"<color=BF55CB>ARRAY! {fieldInformation.FieldType} {fieldInfo.Name} {fieldOwner.GetType()}</color>");
                         }
 
                         if (methodLocalReferencingFields == null)
@@ -244,8 +239,8 @@ namespace FabulousReplacer
                         {
                             ExternallyOwnedFieldInformation eofi = ScriptableObject.CreateInstance<ExternallyOwnedFieldInformation>();
                             
-                            eofi.fieldInformation = new FieldInformation(someObject.GetType());
-                            eofi.fieldInformation.FieldName = fieldInfo.Name;
+                            eofi.fieldInformation = new FieldInformation(fieldInfo.Name, someObject.GetType());
+
                             if (fieldInfo.FieldType.IsGenericType && fieldInfo.FieldType.GetGenericTypeDefinition() == typeof(List<>))
                             {
                                 eofi.fieldInformation.FieldType |= FieldType.Listed;
@@ -269,8 +264,8 @@ namespace FabulousReplacer
                                 eofi.fieldInformation.FieldType = FieldType.Direct;
                             }
 
-                            eofi.ExternalOwnerFieldName = fieldInfo.Name;
 
+                            eofi.ExternalOwnerFieldName = fieldInfo.Name;
                             //! Note that this might be a problem in case of inherited fields, check it
                             eofi.ExternalOwnerType = someObject.GetType();
                             eofi.ExternalOwnerAssemblyName = someObject.GetType().AssemblyQualifiedName;

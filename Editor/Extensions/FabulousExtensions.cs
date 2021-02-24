@@ -11,24 +11,25 @@ namespace FabulousReplacer
 {
     public static class FabulousExtensions
     {
-        // Gets the type originally declaring a given field in case 
-        // the passed type is just a child inheriting that field
         /*
-        * This thingy was necessary when some text fields were inherited
+        * Gets the type originally declaring a given field in case 
+        * the passed type is just a child inheriting that field.
+        * This thingy is necessary when some text fields were inherited
         */
-        //! MUCH MESS HERE, FIX CLEAN
         public static Type GetFieldDeclaringType(Type type, string field)
         {
+            // Debug.Log($"Searching {type} for {field} field");
+
             Type originalType = type;
 
             FieldInfo fieldInfo = type
-                .GetFields(ReferenceFinder.GENEROUS_NONSTATIC_FIELD_SEARCH_FLAGS)
+                .GetFields(ReferenceFinder.GENEROUS_NONSTATIC_FIELD_SEARCH_FLAGS | BindingFlags.DeclaredOnly)
                 .Where(f => f.DeclaringType == type)
                 .FirstOrDefault(f => f.Name == field);
             
             if (fieldInfo == null)
             {
-                // Debug.Log($"{type} didnt contain {field} definition");
+                // Debug.Log($"Didn't find, switching to base type of {type.BaseType}");
 
                 type = type.BaseType;
 
@@ -40,24 +41,6 @@ namespace FabulousReplacer
 
                 type = GetFieldDeclaringType(type, field);
             }
-
-            // if (type == null)
-            // {
-            //     foreach (Type t in originalType.GetNestedTypes())
-            //     {
-
-            //     }
-
-            //     type = type.BaseType;
-
-            //     if (type == null)
-            //     {
-            //         Debug.LogError("Failed to find enclosing type.");
-            //         return null;
-            //     }
-
-            //     type = GetFieldDeclaringType(type, field);
-            // }
 
             return type;
         }

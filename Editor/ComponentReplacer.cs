@@ -1,26 +1,18 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.UIElements;
 using UnityEditor;
-using Unity.EditorCoroutines.Editor;
-using UnityEditor.Compilation;
 using TMPro;
 using Button = UnityEngine.UIElements.Button;
 using System;
-using System.IO;
-using System.Text.RegularExpressions;
-using System.Text;
 using UnityEngine.UI;
-using UnityEditor.UIElements;
 using System.Reflection;
-using System.Linq;
 
 namespace FabulousReplacer
 {
     public class ComponentReplacer
     {
-        private const string ADAPTER_PARENT_NAME = "{0}_TextAdaptersParent";
+        private const string ADAPTER_PARENT_NAME = "TextAdaptersParent_{0}";
         private const string ADAPTER_GAMEOBJECT_NAME = "TMProAdapter_{0}";
 
         UpdatedReferenceAddressBook _updatedReferenceAddressBook;
@@ -42,16 +34,6 @@ namespace FabulousReplacer
 
         private void RunReplaceLogic()
         {
-            // foreach (var reference in _updatedReferenceAddressBook)
-            // {
-            //     List<ReplaceUnit> referenceGroup = reference.Value;
-
-            //     foreach (ReplaceUnit replaceUnit in referenceGroup)
-            //     {
-            //         ReplaceTextComponent(replaceUnit);
-            //     }
-            // }
-
             try
             {
                 AssetDatabase.StartAssetEditing();
@@ -99,7 +81,7 @@ namespace FabulousReplacer
 
                 if (updatedReference.isReferenced)
                 {
-                    TMProAdapter tmProAdapter = CreateTextAdapter(updatedReference, root, tmProText);
+                    TMProAdapter tmProAdapter = GetTextAdapter(updatedReference, root, tmProText);
                     AssignTMProReference(updatedReference, tmProAdapter, root);
                 }
             }
@@ -134,7 +116,7 @@ namespace FabulousReplacer
             return newText;
         }
 
-        private static TMProAdapter CreateTextAdapter(ReplaceUnit updatedReference, GameObject root, TextMeshProUGUI newTextComponent)
+        private static TMProAdapter GetTextAdapter(ReplaceUnit updatedReference, GameObject root, TextMeshProUGUI newTextComponent)
         {
             TMProAdapter adapter = null;
 
@@ -142,10 +124,11 @@ namespace FabulousReplacer
             string adapterParentName = String.Format(ADAPTER_PARENT_NAME, fieldOwnerName);
 
             GameObject adaptersParent = GetAdaptersParent(root, adapterParentName);
-            adapter = GetAdapter(updatedReference, newTextComponent, adaptersParent);
+            adapter = GetOrCreateAdapter(updatedReference, newTextComponent, adaptersParent);
 
             return adapter;
         }
+
         private static GameObject GetAdaptersParent(GameObject root, string adapterParentName)
         {
             GameObject adaptersParent;
@@ -166,7 +149,7 @@ namespace FabulousReplacer
             return adaptersParent;
         }
 
-        private static TMProAdapter GetAdapter(ReplaceUnit updatedReference, TextMeshProUGUI newTextComponent, GameObject adaptersParent)
+        private static TMProAdapter GetOrCreateAdapter(ReplaceUnit updatedReference, TextMeshProUGUI newTextComponent, GameObject adaptersParent)
         {
             TMProAdapter adapter;
             string fieldName = GetAdapterGameObjectName(updatedReference.fieldInformation);
@@ -180,9 +163,6 @@ namespace FabulousReplacer
             }
             else
             {
-                Debug.LogError($"Dos that ever happen and should it even, maybe in case of repeated reference");
-
-                //TODO add version with FieldInformation
                 adapter = adaptersParent.GetComponent<TMProAdapterParent>()[fieldName];
             }
 
@@ -230,7 +210,7 @@ namespace FabulousReplacer
         {
             if (tmProAdapter == null)
             {
-                Debug.LogError($"Adapter is null for {reference.prefabPath} field {reference.fieldName}");
+                Debug.LogError($"Adapter is null for {reference.prefabPath} field {reference.fieldInformation.FieldName}");
             }
 
             object fieldOwner = GetFieldOwner(reference, root);
@@ -372,7 +352,8 @@ namespace FabulousReplacer
 
             tmProText.fontSizeMin = textInfo.MinSize;
             tmProText.richText = textInfo.IsRichText;
-            tmProText.characterSpacing = -1.1f;
+            // tmProText.characterSpacing = -1f; // ? Consider bringing it back
+            tmProText.characterSpacing = 0f;
         }
 
         #endregion // TEXT COMPONENT REPLACEMENT

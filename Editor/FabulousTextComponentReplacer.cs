@@ -1,10 +1,7 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Text;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
@@ -614,9 +611,6 @@ namespace FabulousReplacer
                     {
                         SaveTextReferences(originalPrefabPath, instanceParentPreafab, textInstance);
 
-                        // TODO take care of logging if needed
-                        // logthisone = UpdateCountLogger(logthisone, textInstanceReferences);
-
                         // ? This is because the counter will
                         _replaceCounter.updatedTextComponentCount++;
                     }
@@ -717,41 +711,9 @@ namespace FabulousReplacer
                         _replaceCounter.updatedTextComponentReferencesCount++;
                     }
                 }
-                else
-                {
-                    Debug.Log($"nope! {mono} does not refer the {textComponent}");
-                }
             }
 
             return updatedReferences;
-        }
-
-        // TODO Update this if needed
-        [Obsolete]
-        private bool UpdateCountLogger(bool logthisone, List<MonoBehaviour> textReferences)
-        {
-            // * Below is just for counter purposes
-            foreach (var monoRef in textReferences)
-            {
-                monoRef.TryGetAllFieldsOfType<Text>(out List<FieldInfo> foundTFields);
-                foreach (var field in foundTFields)
-                {
-                    try
-                    {
-                        _textFieldsByMonobehaviour[monoRef].Remove(field);
-                        if (_textFieldsByMonobehaviour[monoRef].Count == 0)
-                        {
-                            _textFieldsByMonobehaviour.Remove(monoRef);
-                        }
-                    }
-                    catch (Exception)
-                    {
-                        logthisone = true;
-                    }
-                }
-            }
-
-            return logthisone;
         }
 
         private void PrintPrefabAnalysis(GameObject prefab, MultilineStringBuilder msb, List<Text> localTextComponents)

@@ -1,4 +1,4 @@
 
 // field: {0} 
 [SerializeField] private TextMeshProUGUI {0}TMPro;
-[SerializeField] public TMProAdapter {0};
+[SerializeField, HideInInspector] public TMProAdapter {0};
