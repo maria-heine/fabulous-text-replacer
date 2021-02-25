@@ -13,6 +13,8 @@ namespace FabulousReplacer
         // TODO This really requires checking whether we are getting everything we want.
         public const BindingFlags GENEROUS_NONSTATIC_FIELD_SEARCH_FLAGS = BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance;
 
+        public static readonly string[] EXCLUDED_NAMESPACES = new string[] { "System", "UnityEngine" };
+
         #region PRIVATE
 
         private static void IterateOverFieldsOfType<T>(
@@ -37,6 +39,16 @@ namespace FabulousReplacer
 
             if (fields.Count == 0) return;
 
+            //FieldInfo[] serializedFields = fields
+            //    .Where(fi => fi.FieldType.IsSerializable || fi.CustomAttributes.Any(attr => 
+            //    {
+                    
+            //        Debug.Log("yay had unity attr");
+            //        return attr.AttributeType == typeof(UnityEngine.SerializeField);
+            //    }))
+            //    .ToArray();
+
+            //serializedFields.ExecuteOnAllFieldsOfType<T>(owner, onTypeMatchingField, onCustomClass);
             fields.ToArray().ExecuteOnAllFieldsOfType<T>(owner, onTypeMatchingField, onCustomClass);
         }
 
@@ -62,9 +74,16 @@ namespace FabulousReplacer
                             onTypeMatchingField(owner, field, obj);
                         }
                     }
-                    else
+                    else if (IsValidOrNullNamespace(field.FieldType.GetElementType()) 
+                        && field.CustomAttributes.Any(attr => attr.AttributeType == typeof(UnityEngine.SerializeField)))
                     {
                         IEnumerable enumerable = (IEnumerable)field.GetValue(owner);
+
+                        if (enumerable == null)
+                        {
+                            Debug.Log($"Null {owner} {field}");
+                            continue;
+                        }
 
                         foreach (var item in enumerable)
                         {
@@ -85,9 +104,16 @@ namespace FabulousReplacer
                             onTypeMatchingField(owner, field, obj);
                         }
                     }
-                    else
+                    else if (IsValidOrNullNamespace(field.FieldType.GenericTypeArguments.Single()) 
+                        && field.CustomAttributes.Any(attr => attr.AttributeType == typeof(UnityEngine.SerializeField)))
                     {
                         IList enumerable = (IList)field.GetValue(owner);
+
+                        if (enumerable == null)
+                        {
+                            Debug.Log($"Null {owner} {field}");
+                            continue;
+                        }
 
                         foreach (var item in enumerable)
                         {
@@ -106,11 +132,19 @@ namespace FabulousReplacer
                             onTypeMatchingField(owner, field, obj);
                         }
                     }
-                    else if (!field.FieldType.IsPrimitive && field.FieldType != typeof(string) && field.FieldType != typeof(object))
+                    else if (!field.FieldType.IsPrimitive 
+                        && IsValidOrNullNamespace(field.FieldType)
+                        && field.CustomAttributes.Any(attr => attr.AttributeType == typeof(UnityEngine.SerializeField)))
                     {
                         //* Here we are checking if the field is a custom class
 
                         var newOwner = field.GetValue(owner);
+
+                        if (newOwner == null)
+                        {
+                            Debug.Log($"Null {owner} {field}");
+                            continue;
+                        }
 
                         onCustomClass(newOwner, field);
                     }
@@ -118,6 +152,11 @@ namespace FabulousReplacer
             }
         }
         #endregion // PRIVATE
+
+        private static bool IsValidOrNullNamespace(Type type)
+        {
+            return string.IsNullOrWhiteSpace(type.Namespace) || !EXCLUDED_NAMESPACES.Any(s => type.Namespace.Contains(s));
+        }
 
         #region PUBLIC
 
@@ -238,7 +277,7 @@ namespace FabulousReplacer
                         foreach (FieldInformation externalField in externalFieldsInformation)
                         {
                             ExternallyOwnedFieldInformation eofi = ScriptableObject.CreateInstance<ExternallyOwnedFieldInformation>();
-                            
+
                             eofi.fieldInformation = new FieldInformation(fieldInfo.Name, someObject.GetType());
 
                             if (fieldInfo.FieldType.IsGenericType && fieldInfo.FieldType.GetGenericTypeDefinition() == typeof(List<>))

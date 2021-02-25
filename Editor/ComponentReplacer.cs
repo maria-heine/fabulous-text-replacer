@@ -36,7 +36,7 @@ namespace FabulousReplacer
         {
             try
             {
-                AssetDatabase.StartAssetEditing();
+                //AssetDatabase.StartAssetEditing();
 
                 foreach (var reference in _updatedReferenceAddressBook)
                 {
@@ -54,7 +54,7 @@ namespace FabulousReplacer
             }
             finally
             {
-                AssetDatabase.StopAssetEditing();
+                //AssetDatabase.StopAssetEditing();
             }
         }
 

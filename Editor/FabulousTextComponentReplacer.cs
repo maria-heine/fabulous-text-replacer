@@ -31,6 +31,7 @@ namespace FabulousReplacer
         List<GameObject> _loadedPrefabs;
         Dictionary<GameObject, List<GameObject>> _crossPrefabReferences;
         Dictionary<GameObject, List<MonoBehaviour>> _customMonobehavioursByPrefab;
+        List<string> _allFoundMonoBehaviourTypeNames;
         Dictionary<MonoBehaviour, List<FieldInfo>> _textFieldsByMonobehaviour;
         Dictionary<GameObject, List<GameObject>> _nestedPrefabs;
         Dictionary<Type, List<GameObject>> _scriptReferences;
@@ -396,6 +397,7 @@ namespace FabulousReplacer
             _scriptsByPrefab = new Dictionary<GameObject, List<Type>>();
             _customMonobehavioursByPrefab = new Dictionary<GameObject, List<MonoBehaviour>>();
             _textFieldsByMonobehaviour = new Dictionary<MonoBehaviour, List<FieldInfo>>();
+            List<string> allFoundMonoBehaviourTypeNames = new List<string>();
 
             foreach (var prefab in _loadedPrefabs)
             {
@@ -419,6 +421,8 @@ namespace FabulousReplacer
                             _scriptReferences[monoType] = new List<GameObject>();
                         }
 
+                        allFoundMonoBehaviourTypeNames.Add(monoType.Name);
+
                         if (mono.TryGetAllFieldsOfType<Text>(out List<FieldInfo> foundFields))
                         {
                             _textFieldsByMonobehaviour.Add(mono, foundFields);
@@ -432,6 +436,8 @@ namespace FabulousReplacer
                     }
                 }
             }
+
+            UpdatedReferenceAddressBook._allFoundMonoBehaviourTypeNames = allFoundMonoBehaviourTypeNames.Distinct().ToList();
         }
 
         #endregion // Prefab Loading
@@ -702,6 +708,11 @@ namespace FabulousReplacer
             foreach (MonoBehaviour mono in monoBehaviours)
             {
                 List<FieldInformation> referencingFields = null;
+
+                if (mono == null)
+                {
+                    Debug.Log($"wgat the fuck {parentPrefab}");
+                }
 
                 if (mono.IsReferencingComponentOfType<Text>(textComponent, ref referencingFields))
                 {

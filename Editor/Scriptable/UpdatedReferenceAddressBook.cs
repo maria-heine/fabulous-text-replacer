@@ -25,6 +25,7 @@ namespace FabulousReplacer
         }
         
         [SerializeField] List<FakeDictionary> fakePrefabsUpdatedReferences;
+        [SerializeField] public List<string> _allFoundMonoBehaviourTypeNames;
 
         private string[] paths;
         public string[] Paths
