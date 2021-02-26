@@ -26,7 +26,7 @@ namespace FabulousReplacer
                 .GetFields(ReferenceFinder.GENEROUS_NONSTATIC_FIELD_SEARCH_FLAGS | BindingFlags.DeclaredOnly)
                 .Where(f => f.DeclaringType == type)
                 .FirstOrDefault(f => f.Name == field);
-            
+
             if (fieldInfo == null)
             {
                 // Debug.Log($"Didn't find, switching to base type of {type.BaseType}");
@@ -170,7 +170,17 @@ namespace FabulousReplacer
             GameObject sameGo = duplicate;
             while (path.Count > 0)
             {
-                sameGo = sameGo.transform.GetChild(path.Pop()).gameObject;
+                int childIndex = path.Pop();
+                if (sameGo.transform.childCount == 0 || childIndex > sameGo.transform.childCount - 1 )
+                {
+                    Debug.Log($"Failed to find same GO of original {original} c {originalC} for duplicate {duplicate}");
+                    return null;
+                }
+                else
+                {
+                    Transform kid = sameGo.transform.GetChild(childIndex);
+                    sameGo = kid.gameObject;
+                }
             }
 
             //get component index

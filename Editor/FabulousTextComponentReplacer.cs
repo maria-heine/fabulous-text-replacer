@@ -15,13 +15,8 @@ namespace FabulousReplacer
     public partial class FabulousTextComponentReplacer : EditorWindow
     {
         public const int WORK_DEPTH = -1;
-        const string SEARCH_DIRECTORY = "Assets/RemoteAssets";
-        private readonly List<string> ExcludedAssetPaths = new List<string>()
-        {
-            "Assets/RemoteAssets/UI/InGame/NavigatorHUD/NavigatorHUDView.prefab",
-            "Assets/RemoteAssets/UI/InGame/QuickChatHUD/QuickChatPanelHUDView.prefab",
-            "Assets/RemoteAssets/UI/Popup/CardRarityBonusPopup.prefab"
-        };
+        private const string SEARCH_DIRECTORY = "Assets/RemoteAssets";
+        private const string EXCLUDED_PREFABS_ASSET_PATH = "Packages/com.mariaheineboombyte.fabulous-text-replacer/Editor/Scriptable/ExcludedPrefabs.asset";
 
         /*
         ! Note that "Assets/Original/Prefabs"
@@ -43,6 +38,7 @@ namespace FabulousReplacer
 
         Box _boxDisplayer;
         ObjectField _selectedPrefabsField;
+        ObjectField _excludedPrefabsField;
 
         Action UpgradeProgressBar;
 
@@ -133,6 +129,13 @@ namespace FabulousReplacer
                 objectType = typeof(SelectedPrefabsBook)
             };
             container.Add(_selectedPrefabsField);
+
+            _excludedPrefabsField = new ObjectField("Excluded prefabs")
+            {
+                objectType = typeof(SelectedPrefabsBook)
+            };
+            _excludedPrefabsField.value = AssetDatabase.LoadAssetAtPath(EXCLUDED_PREFABS_ASSET_PATH, typeof(SelectedPrefabsBook));
+            container.Add(_excludedPrefabsField);
 
             Button initializeButton = new Button(() =>
             {
@@ -307,9 +310,9 @@ namespace FabulousReplacer
             return paths;
         }
 
-        private bool IsExcludedPath(string path)
+        private static bool IsExcludedPath(string[] excludedPaths, string path)
         {
-            foreach (string excludedPath in ExcludedAssetPaths)
+            foreach (string excludedPath in excludedPaths)
             {
                 if (path == excludedPath)
                 {
@@ -330,9 +333,14 @@ namespace FabulousReplacer
 
             Debug.Log($"Found {assets.Length} assets.");
 
+            string[] excludedPaths = (_excludedPrefabsField.value as SelectedPrefabsBook).SelectedPrefabs
+                .Where(o => o != null)
+                .Select(go => AssetDatabase.GetAssetPath(go))
+                .ToArray();
+
             string[] paths = assets
                 .Select(asset => AssetDatabase.GUIDToAssetPath(asset))
-                .Where(path => !IsExcludedPath(path))
+                .Where(path => !IsExcludedPath(excludedPaths, path))
                 .ToArray();
 
             return paths;
@@ -663,7 +671,7 @@ namespace FabulousReplacer
                                 }
                                 else
                                 {
-                                    Debug.LogError("That really shouldn't be null");
+                                    Debug.Log($"Failed to get duplicate of a {originalText.name} component of an original <<{originalPrefab.name}>> gameobject and it's duplicate <<{referencerNestedPrefab.name}>> in <<{thisPrefabReferncer}>>");
                                 }
                             }
                             catch (Exception)

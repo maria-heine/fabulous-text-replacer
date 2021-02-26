@@ -34,28 +34,38 @@ namespace FabulousReplacer
 
         private void RunReplaceLogic()
         {
-            try
+            foreach (var reference in _updatedReferenceAddressBook)
             {
-                //AssetDatabase.StartAssetEditing();
+                List<ReplaceUnit> referenceGroup = reference.Value;
 
-                foreach (var reference in _updatedReferenceAddressBook)
+                foreach (ReplaceUnit replaceUnit in referenceGroup)
                 {
-                    List<ReplaceUnit> referenceGroup = reference.Value;
-
-                    foreach (ReplaceUnit replaceUnit in referenceGroup)
-                    {
-                        ReplaceTextComponent(replaceUnit);
-                    }
+                    ReplaceTextComponent(replaceUnit);
                 }
             }
-            catch (Exception ex)
-            {
-                throw ex;
-            }
-            finally
-            {
-                //AssetDatabase.StopAssetEditing();
-            }
+
+            //try
+            //{
+            //    AssetDatabase.StartAssetEditing();
+
+            //    foreach (var reference in _updatedReferenceAddressBook)
+            //    {
+            //        List<ReplaceUnit> referenceGroup = reference.Value;
+
+            //        foreach (ReplaceUnit replaceUnit in referenceGroup)
+            //        {
+            //            ReplaceTextComponent(replaceUnit);
+            //        }
+            //    }
+            //}
+            //catch (Exception ex)
+            //{
+            //    throw ex;
+            //}
+            //finally
+            //{
+            //    AssetDatabase.StopAssetEditing();
+            //}
         }
 
         //
@@ -82,6 +92,7 @@ namespace FabulousReplacer
                 if (updatedReference.isReferenced)
                 {
                     TMProAdapter tmProAdapter = GetTextAdapter(updatedReference, root, tmProText);
+                    if (tmProAdapter == null) return;
                     AssignTMProReference(updatedReference, tmProAdapter, root);
                 }
             }
@@ -120,11 +131,19 @@ namespace FabulousReplacer
         {
             TMProAdapter adapter = null;
 
-            string fieldOwnerName = updatedReference.fieldInformation.FieldOwnerType.Name;
-            string adapterParentName = String.Format(ADAPTER_PARENT_NAME, fieldOwnerName);
+            try
+            {
+                string fieldOwnerName = updatedReference.fieldInformation.FieldOwnerType.Name;
+                string adapterParentName = String.Format(ADAPTER_PARENT_NAME, fieldOwnerName);
 
-            GameObject adaptersParent = GetAdaptersParent(root, adapterParentName);
-            adapter = GetOrCreateAdapter(updatedReference, newTextComponent, adaptersParent);
+                GameObject adaptersParent = GetAdaptersParent(root, adapterParentName);
+                adapter = GetOrCreateAdapter(updatedReference, newTextComponent, adaptersParent);
+
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"Exception occured for {updatedReference.rootPrefab} at path {updatedReference.prefabPath}, message:  {ex.Message}");
+            }
 
             return adapter;
         }
@@ -208,19 +227,26 @@ namespace FabulousReplacer
 
         private void AssignTMProReference(ReplaceUnit reference, TMProAdapter tmProAdapter, GameObject root)
         {
-            if (tmProAdapter == null)
+            try
             {
-                Debug.LogError($"Adapter is null for {reference.prefabPath} field {reference.fieldInformation.FieldName}");
+                if (tmProAdapter == null)
+                {
+                    Debug.LogError($"Adapter is null for {reference.prefabPath} field {reference.fieldInformation.FieldName}");
+                }
+
+                object fieldOwner = GetFieldOwner(reference, root);
+
+                GetAdapterAndTmproFieldInfos(
+                    reference.fieldInformation,
+                    out FieldInfo adapterFieldInfo,
+                    out FieldInfo tmProFieldInfo);
+
+                SetAdapterAndTMProFieldValues(tmProAdapter, reference, fieldOwner, adapterFieldInfo, tmProFieldInfo);
             }
-
-            object fieldOwner = GetFieldOwner(reference, root);
-
-            GetAdapterAndTmproFieldInfos(
-                reference.fieldInformation,
-                out FieldInfo adapterFieldInfo,
-                out FieldInfo tmProFieldInfo);
-
-            SetAdapterAndTMProFieldValues(tmProAdapter, reference, fieldOwner, adapterFieldInfo, tmProFieldInfo);
+            catch (Exception ex)
+            {
+                Debug.LogError($"Exception occured for {reference.rootPrefab} at path {reference.prefabPath}, message:  {ex.Message}");
+            }
         }
 
         private static object GetFieldOwner(ReplaceUnit replaceUnit, GameObject root)
@@ -229,13 +255,14 @@ namespace FabulousReplacer
             FieldInformation fieldInformation = replaceUnit.fieldInformation;
 
             Type monoType = fieldInformation.FieldOwnerType;
+
             Component mono = FabulousExtensions
                 .GetGameObjectAtAddress(root, replaceUnit.MonoAddress)
                 .GetComponent(monoType);
 
             if (mono == null)
             {
-                throw new NullReferenceException($"Failed to find mono by its address for prefab: {root} at path {replaceUnit.prefabPath}");
+                throw new NullReferenceException($"Failed to find mono {monoType} for field {fieldInformation.FieldName} and type {fieldInformation.FieldType} by its address for prefab: {root} at path {replaceUnit.prefabPath} and address {string.Join(",", replaceUnit.MonoAddress.ToArray())}");
             }
 
             if (fieldInformation.FieldType.HasOneOfTheFlags(FieldType.Nested | FieldType.External))
@@ -331,7 +358,7 @@ namespace FabulousReplacer
 
             if (adapterFieldInfo == null || tmProFieldInfo == null)
             {
-                Debug.Log($"Either adapterFieldinfo: {adapterFieldInfo} or tmprofieldinfo: {tmProFieldInfo} is still null");
+                Debug.Log($"Either adapterFieldinfo: {adapterFieldInfo} or tmprofieldinfo: {tmProFieldInfo} is still null for type {type} and field {fieldInformation.FieldName}");
             }
         }
 

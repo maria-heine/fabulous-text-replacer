@@ -81,7 +81,7 @@ namespace FabulousReplacer
 
                         if (enumerable == null)
                         {
-                            Debug.Log($"Null {owner} {field}");
+                            //Debug.Log($"Null {owner} {field}");
                             continue;
                         }
 
@@ -111,7 +111,7 @@ namespace FabulousReplacer
 
                         if (enumerable == null)
                         {
-                            Debug.Log($"Null {owner} {field}");
+                            //Debug.Log($"Null {owner} {field}");
                             continue;
                         }
 
@@ -142,7 +142,7 @@ namespace FabulousReplacer
 
                         if (newOwner == null)
                         {
-                            Debug.Log($"Null {owner} {field}");
+                            //Debug.Log($"Null {owner} {field}");
                             continue;
                         }
 
