@@ -107,17 +107,30 @@ namespace FabulousReplacer
                         .GroupBy(x => x.FieldName)
                         .Select(x => x.FirstOrDefault())
                         .ToArray();
-
+                    
                     string path = GetScriptFilePath(distinctTextFieldInformations.First());
+
+                    //! another hack here
+                    FieldInformation[] unupdatedFieldInformation = distinctTextFieldInformations
+                        .Where(fi => {
+                            string fieldPattern = @$"// field: {fi.FieldDeclaringType}.{fi.FieldName}";
+                            if (DoesScriptContain(path, fieldPattern))
+                            {
+                                Debug.Log($"Filtered out a thingy: {path} already contained {fieldPattern}");
+                                return false;
+                            }
+                            else return true;
+                        })
+                        .ToArray();
 
                     if (!scriptLinesByPath.ContainsKey(path))
                     {
                         scriptLinesByPath.Add(path, new List<string>());
-                        scriptLinesByPath[path] = GetUpdatedScriptLines(path, fieldDefiningType, fieldType, distinctTextFieldInformations);
+                        scriptLinesByPath[path] = GetUpdatedScriptLines(path, fieldDefiningType, fieldType, unupdatedFieldInformation);
                     }
                     else
                     {
-                        scriptLinesByPath[path] = UpdateReplacerRegion(scriptLinesByPath[path], fieldType, distinctTextFieldInformations);
+                        scriptLinesByPath[path] = UpdateReplacerRegion(scriptLinesByPath[path], fieldType, unupdatedFieldInformation);
                     }
                 }
 
@@ -247,19 +260,19 @@ namespace FabulousReplacer
             {
                 scriptText += item + "\n";
             }
-            // ANOTHER HACJK
-            // because sometimes fields were written in duplicate
-            FieldInformation[] filteredfi = fieldInformations.Where(fi => new Regex($@"{fi.FieldName}TMPro").IsMatch(scriptText) == false).ToArray();
+            // // ANOTHER HACJK
+            // // because sometimes fields were written in duplicate
+            // FieldInformation[] filteredfi = fieldInformations.Where(fi => new Regex($@"{fi.FieldName}TMPro").IsMatch(scriptText) == false).ToArray();
 
-            if (filteredfi.Length == 0)
-            {
-                Debug.Log($"Unhealthy script update request for {fieldInformations.First().FieldOwnerType} declared by {fieldInformations.First().FieldDeclaringType}");
-                return currentScriptLines.ToList();
-            }
+            // if (filteredfi.Length == 0)
+            // {
+            //     Debug.Log($"Unhealthy script update request for {fieldInformations.First().FieldOwnerType} declared by {fieldInformations.First().FieldDeclaringType}");
+            //     return currentScriptLines.ToList();
+            // }
 
             Regex replacerRegionEndRx = new Regex(@"\bfin\b");
             //Regex oldFieldSearchRx = GetOldFieldSearchPattern(fieldInformations);
-            Regex oldFieldSearchRx = GetOldFieldSearchPattern(filteredfi);
+            Regex oldFieldSearchRx = GetOldFieldSearchPattern(fieldInformations);
             Regex indentRx = new Regex(@"^\s+");
 
             foreach (string line in currentScriptLines)
@@ -269,8 +282,8 @@ namespace FabulousReplacer
                     Match indentation = indentRx.Match(line);
 
                     //foreach (string templateLine in GetTemplateLines(fieldsType, fieldInformations))
-                    foreach (string templateLine in GetTemplateLines(fieldsType, filteredfi))
-                        {
+                    foreach (string templateLine in GetTemplateLines(fieldsType, fieldInformations))
+                    {
                         finalLines.Add($"{indentation.Value}{templateLine}");
                     }
                 }
@@ -302,12 +315,12 @@ namespace FabulousReplacer
             FieldInformation[] fieldInformations,
             IEnumerable<string> templateLines)
         {
-            if (DoesScriptContain(scriptPath, REPLACER_REGION_TITLE))
-            {
-                Debug.Log($"Preventing corrupted insert replacer region request for {scriptType}");
-                var currentScriptLines = ReadScriptLines(scriptPath);
-                return currentScriptLines;
-            }
+            // if (DoesScriptContain(scriptPath, REPLACER_REGION_TITLE))
+            // {
+            //     Debug.Log($"Preventing corrupted insert replacer region request for {scriptType}");
+            //     var currentScriptLines = ReadScriptLines(scriptPath);
+            //     return currentScriptLines;
+            // }
 
             List<string> finalScriptLines = new List<string>();
 
@@ -482,14 +495,14 @@ namespace FabulousReplacer
 
             foreach (var fieldInformation in fieldInformations)
             {
-                IEnumerable<string> lines = GetAdapterTemplate(fieldInformation.FieldName, fieldsType);
+                IEnumerable<string> lines = GetAdapterTemplate(fieldInformation, fieldsType);
                 templateLines.AddRange(lines);
             }
 
             return templateLines;
         }
 
-        private static List<string> GetAdapterTemplate(string fileName, FieldType fieldType)
+        private static List<string> GetAdapterTemplate(FieldInformation fieldInformation, FieldType fieldType)
         {
             FileStream stream = null;
 
@@ -509,7 +522,7 @@ namespace FabulousReplacer
             }
             else
             {
-                Debug.LogError($"Unhandled field type: {fieldType} for {fileName}, hacking around it.");
+                Debug.LogError($"Unhandled field type: {fieldType} for {fieldInformation.FieldName} {fieldInformation.FieldOwnerType}, hacking around it.");
                 templatePath = $"Packages/com.mariaheineboombyte.fabulous-text-replacer/Editor/Templates/{STANDARD_TEMPLATE}.txt";
             }
 
@@ -522,15 +535,13 @@ namespace FabulousReplacer
 
             string line;
             List<string> templateLines = new List<string>();
-            string pattern = @"\{0\}";
-
-            Regex rx = new Regex(@"\{0\}");
 
             using (var reader = new StreamReader(stream))
             {
                 while ((line = reader.ReadLine()) != null)
                 {
-                    line = Regex.Replace(line, pattern, fileName);
+                    line = Regex.Replace(line, @"\{0\}", fieldInformation.FieldName);
+                    line = Regex.Replace(line, @"\{1\}", fieldInformation.FieldDeclaringType.Name);
                     templateLines.Add($"{line}");
                 }
             }

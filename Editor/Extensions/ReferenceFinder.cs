@@ -75,7 +75,7 @@ namespace FabulousReplacer
                         }
                     }
                     else if (IsValidOrNullNamespace(field.FieldType.GetElementType()) 
-                        && field.CustomAttributes.Any(attr => attr.AttributeType == typeof(UnityEngine.SerializeField)))
+                        && field.FieldType.GetElementType().IsSerializable)
                     {
                         IEnumerable enumerable = (IEnumerable)field.GetValue(owner);
 
@@ -105,7 +105,7 @@ namespace FabulousReplacer
                         }
                     }
                     else if (IsValidOrNullNamespace(field.FieldType.GenericTypeArguments.Single()) 
-                        && field.CustomAttributes.Any(attr => attr.AttributeType == typeof(UnityEngine.SerializeField)))
+                        && field.FieldType.GenericTypeArguments.Single().IsSerializable)
                     {
                         IList enumerable = (IList)field.GetValue(owner);
 
@@ -134,7 +134,7 @@ namespace FabulousReplacer
                     }
                     else if (!field.FieldType.IsPrimitive 
                         && IsValidOrNullNamespace(field.FieldType)
-                        && field.CustomAttributes.Any(attr => attr.AttributeType == typeof(UnityEngine.SerializeField)))
+                        && CheckIfFieldIsSerialized(field))
                     {
                         //* Here we are checking if the field is a custom class
 
@@ -142,8 +142,12 @@ namespace FabulousReplacer
 
                         if (newOwner == null)
                         {
-                            //Debug.Log($"Null {owner} {field}");
+                            Debug.Log($"Null {owner} {field}");
                             continue;
+                        }
+                        else
+                        {
+                            Debug.Log($"hmmm {owner} {field}");
                         }
 
                         onCustomClass(newOwner, field);
@@ -151,6 +155,17 @@ namespace FabulousReplacer
                 }
             }
         }
+
+        private static bool CheckIfFieldIsSerialized(FieldInfo field)
+        {
+            bool isSerializable = field.CustomAttributes.Any(attr => attr.AttributeType == typeof(UnityEngine.SerializeField))
+             || field.FieldType.IsSerializable;
+            
+            Debug.Log($"{field.Name} of {field.FieldType} serializeble: {isSerializable}");
+            
+            return isSerializable;
+        }
+
         #endregion // PRIVATE
 
         private static bool IsValidOrNullNamespace(Type type)
@@ -302,7 +317,6 @@ namespace FabulousReplacer
                             {
                                 eofi.fieldInformation.FieldType = FieldType.Direct;
                             }
-
 
                             eofi.ExternalOwnerFieldName = fieldInfo.Name;
                             //! Note that this might be a problem in case of inherited fields, check it
