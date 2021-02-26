@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 696d29fc0a6dedd45b1ec25e3443a375, type: 3}
+  m_Name: FontAssetMap
+  m_EditorClassIdentifier: 
+  defaultFont: {fileID: 11400000, guid: 9b7639a6cedb5944aa0a60de8046f6a7, type: 2}
+  fontAssetReplacePairs:
+  - oldFont: {fileID: 12800000, guid: e3265ab4bf004d28a9537516768c1c75, type: 3}
+    newTMProFont: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
+  - oldFont: {fileID: 12800000, guid: 39121bb02744c9445b96996d7757a6f1, type: 3}
+    newTMProFont: {fileID: 11400000, guid: 43327ef9632338f4abaa903f26e8611b, type: 2}

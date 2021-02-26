@@ -14,22 +14,20 @@ namespace FabulousReplacer
     {
         private const string ADAPTER_PARENT_NAME = "TextAdaptersParent_{0}";
         private const string ADAPTER_GAMEOBJECT_NAME = "TMProAdapter_{0}";
+        private const string FONT_ASSET_MAP_PATH = "Packages/com.mariaheineboombyte.fabulous-text-replacer/Editor/Scriptable/FontAssetMap.asset";
 
         UpdatedReferenceAddressBook _updatedReferenceAddressBook;
-        TMP_FontAsset fontAsset;
+        FontAssetMap _fontAssetMap;
 
         public ComponentReplacer(UpdatedReferenceAddressBook updatedReferenceAddressBook, Button updateComponentsButton)
         {
             _updatedReferenceAddressBook = updatedReferenceAddressBook;
+            _fontAssetMap = AssetDatabase.LoadAssetAtPath(FONT_ASSET_MAP_PATH, typeof(FontAssetMap)) as FontAssetMap;
 
             updateComponentsButton.clicked += () =>
             {
                 RunReplaceLogic();
             };
-
-            //TODO REWORK
-            fontAsset = AssetDatabase
-                .LoadAssetAtPath("Packages/com.mariaheineboombyte.fabulous-text-replacer/TextMeshProFonts/Oswald/Oswald-SemiBold SDF.asset", typeof(TMP_FontAsset)) as TMP_FontAsset;
         }
 
         private void RunReplaceLogic()
@@ -87,7 +85,7 @@ namespace FabulousReplacer
             {
                 GameObject root = editScope.prefabRoot;
                 TextMeshProUGUI tmProText = GetTMProText(updatedReference, textInfo, root);
-                StyleTMProText(textInfo, tmProText);
+                textInfo.StyleTMProText(tmProText, _fontAssetMap);
 
                 if (updatedReference.isReferenced)
                 {
@@ -360,27 +358,6 @@ namespace FabulousReplacer
             {
                 Debug.Log($"Either adapterFieldinfo: {adapterFieldInfo} or tmprofieldinfo: {tmProFieldInfo} is still null for type {type} and field {fieldInformation.FieldName}");
             }
-        }
-
-        private void StyleTMProText(TextInformation textInfo, TextMeshProUGUI tmProText)
-        {
-            tmProText.text = textInfo.Text;
-            tmProText.alignment = textInfo.TMProAlignment;
-            tmProText.font = fontAsset;
-            tmProText.fontSize = (float)textInfo.FontSize;
-            tmProText.color = textInfo.FontColor;
-            tmProText.enableWordWrapping = true;
-
-            // TODO oki that is a small hack
-            // using original font size as max size and always enabling auto sizing
-            tmProText.fontSizeMax = textInfo.FontSize;
-            //newText.enableAutoSizing = textInfo.AutoSize;
-            tmProText.enableAutoSizing = true;
-
-            tmProText.fontSizeMin = textInfo.MinSize;
-            tmProText.richText = textInfo.IsRichText;
-            // tmProText.characterSpacing = -1f; // ? Consider bringing it back
-            tmProText.characterSpacing = 0f;
         }
 
         #endregion // TEXT COMPONENT REPLACEMENT

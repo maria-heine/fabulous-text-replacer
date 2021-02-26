@@ -15,8 +15,12 @@ namespace FabulousReplacer
         public int MaxSize;
         public int MinSize;
         public bool IsRichText;
-        
-        public TextAnchor Alignment { private get; set; }
+        public float LineSpacing;
+        public Font Font;
+        public FontStyle FontStyle;
+        public TextAnchor Alignment;
+        public bool Wrapping;
+
         public TextAlignmentOptions TMProAlignment
         {
             get
@@ -44,6 +48,26 @@ namespace FabulousReplacer
                     default:
                         return TextAlignmentOptions.Midline;
                 }
+            } 
+        }
+
+        public FontStyles TMProFontStyle
+        {
+            get
+            {
+                switch (FontStyle)
+                {
+                    case FontStyle.Bold:
+                        return FontStyles.Bold;
+                    case FontStyle.BoldAndItalic:
+                        return FontStyles.Bold | FontStyles.Italic;
+                    case FontStyle.Italic:
+                        return FontStyles.Italic;
+                    case FontStyle.Normal:
+                        return FontStyles.Normal;
+                    default:
+                        return FontStyles.Normal;
+                }
             }
         }
 
@@ -52,12 +76,40 @@ namespace FabulousReplacer
             Parent = text.gameObject;
             Text = text.text;
             Alignment = text.alignment;
+            Font = text.font;
             FontSize = text.fontSize;
             FontColor = text.color;
+            FontStyle = text.fontStyle;
             AutoSize = text.resizeTextForBestFit;
             MaxSize = text.resizeTextMaxSize;
             MinSize = text.resizeTextMinSize;
             IsRichText = text.supportRichText;
+            LineSpacing = text.lineSpacing;
+            Wrapping = text.horizontalOverflow == HorizontalWrapMode.Wrap;
+        }
+
+        public void StyleTMProText(TextMeshProUGUI tmProText, FontAssetMap fontAssetMap)
+        {
+            tmProText.text = Text;
+            tmProText.alignment = TMProAlignment;
+            tmProText.font = fontAssetMap.GetNewFont(Font);
+            tmProText.fontSize = (float)FontSize;
+            tmProText.fontStyle = TMProFontStyle;
+            tmProText.color = FontColor;
+            tmProText.richText = true;
+            tmProText.characterSpacing = 0f;
+            tmProText.lineSpacing = LineSpacing;
+            tmProText.enableWordWrapping = Wrapping;
+
+            // * Thats a tiny trick to help us match fonts to similar size
+            tmProText.enableAutoSizing = true;
+
+            // TODO oki that is a small hack
+            // using original font size as max size and always enabling auto sizing
+            tmProText.fontSizeMax = FontSize;
+            //newText.enableAutoSizing = AutoSize;
+            tmProText.fontSizeMin = MinSize;
+
         }
     }
 }

@@ -312,12 +312,15 @@ namespace FabulousReplacer
 
         private static bool IsExcludedPath(string[] excludedPaths, string path)
         {
-            foreach (string excludedPath in excludedPaths)
+            if (excludedPaths != null)
             {
-                if (path == excludedPath)
+                foreach (string excludedPath in excludedPaths)
                 {
-                    Debug.Log($"Excluding {path}");
-                    return true;
+                    if (path == excludedPath)
+                    {
+                        Debug.Log($"Excluding {path}");
+                        return true;
+                    }
                 }
             }
 
@@ -333,10 +336,17 @@ namespace FabulousReplacer
 
             Debug.Log($"Found {assets.Length} assets.");
 
-            string[] excludedPaths = (_excludedPrefabsField.value as SelectedPrefabsBook).SelectedPrefabs
-                .Where(o => o != null)
-                .Select(go => AssetDatabase.GetAssetPath(go))
-                .ToArray();
+            SelectedPrefabsBook excludedPrefabs = _excludedPrefabsField == null ? null : _excludedPrefabsField.value as SelectedPrefabsBook;
+
+            string[] excludedPaths = null;
+
+            if (excludedPrefabs != null)
+            {
+                excludedPaths = excludedPrefabs.SelectedPrefabs
+                    .Where(o => o != null)
+                    .Select(go => AssetDatabase.GetAssetPath(go))
+                    .ToArray();
+            }
 
             string[] paths = assets
                 .Select(asset => AssetDatabase.GUIDToAssetPath(asset))
