@@ -16,21 +16,30 @@ public class TMProAdapter : Text
     public TextMeshProUGUI TMProText => _textMesh;
     public new GameObject gameObject => _textMesh.gameObject;
     public new Transform transform => _textMesh.transform;
+
     public override string text
     {
         get => _textMesh.text;
         set => _textMesh.text = value;
     }
+
     public override Color color
     {
         get => _textMesh.color;
         set => _textMesh.color = value;
     }
 
-    private void Awake()
+    public new bool enabled
     {
-        enabled = false;
-        raycastTarget = false;
+        get => _textMesh.enabled;
+        set => _textMesh.enabled = value;
+    }
+
+    private new void Awake()
+    {
+        base.enabled = false;
+        base.raycastTarget = false;
+        base.Awake();
     }
 
     public void SetupAdapter(string fieldName, TextMeshProUGUI textMesh)
