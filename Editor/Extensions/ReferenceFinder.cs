@@ -142,12 +142,7 @@ namespace FabulousReplacer
 
                         if (newOwner == null)
                         {
-                            Debug.Log($"Null {owner} {field}");
                             continue;
-                        }
-                        else
-                        {
-                            Debug.Log($"hmmm {owner} {field}");
                         }
 
                         onCustomClass(newOwner, field);
