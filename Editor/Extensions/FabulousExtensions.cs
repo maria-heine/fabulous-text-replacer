@@ -11,6 +11,11 @@ namespace FabulousReplacer
 {
     public static class FabulousExtensions
     {
+        //
+        // ─── FIELD TYPES ─────────────────────────────────────────────────
+        //
+            
+        #region FIELD TYPES
         /*
         * Gets the type originally declaring a given field in case 
         * the passed type is just a child inheriting that field.
@@ -50,6 +55,13 @@ namespace FabulousReplacer
             return (fieldType1 &= fieldType2) != 0;
         }
 
+        #endregion // FIELD TYPES
+
+        //
+        // ─── EDITOR GUI ──────────────────────────────────────────────────
+        //
+
+        #region EDITOR GUI
         public static TextElement GetTextElement(string textToDisplay)
         {
             return new TextElement() { text = textToDisplay };
@@ -66,6 +78,11 @@ namespace FabulousReplacer
 
             return el;
         }
+        #endregion // EDITOR GUI
+
+        //
+        // ─── NESTED PREFAB SEARCHING ─────────────────────────────────────
+        //
 
         #region NESTED PREFAB SEARCHING
 
@@ -104,7 +121,6 @@ namespace FabulousReplacer
         {
             foundComponents = new List<T>();
 
-            // root.CheckForComponent<T>(foundComponents);
             foundComponents.AddRange(root.GetComponents<T>());
 
             foreach (Transform child in root.transform)
@@ -273,6 +289,10 @@ namespace FabulousReplacer
         }
 
         #endregion // PREFAB COMPARISON
+
+        //
+        // ─── SCRIPT SEARCHING ───────────────────────────────────────────────────────────
+        //
 
         #region SCRIPT SEARCHING
 
