@@ -46,7 +46,7 @@ namespace FabulousReplacer
             var menuBox = new Box();
             menuBox.style.alignItems = Align.Stretch;
             menuBox.style.width = new StyleLength(250f);
-            
+
             _onComponentField = new ObjectField("On component field")
             {
                 objectType = typeof(OnComponentFound<TextMeshProUGUI>)
@@ -64,30 +64,49 @@ namespace FabulousReplacer
         {
             string[] assetPaths = GetAllAssetPaths(new[] { PREFAB_SEARCH_LOCATION });
 
-            foreach (string path in assetPaths)
+            try
             {
-                Type assetType = AssetDatabase.GetMainAssetTypeAtPath(path);
-                bool isValidPrefab = assetType == typeof(GameObject);
-                if (!isValidPrefab) 
-                {
-                    Debug.Log($"<color=yellow>Rejected {assetType} at {path}</color>");
-                    continue;
-                }
-                Debug.Log($"{path}");
-                using (var editScope = new EditPrefabAssetScope(path))
-                {
-                    GameObject root = editScope.prefabRoot;
+                AssetDatabase.StartAssetEditing();
 
-                    if (root.TryGetComponentsInChildren<TextMeshProUGUI>(out List<TextMeshProUGUI> textComponents, skipNestedPrefabs: true))
+                foreach (string path in assetPaths)
+                {
+                    Type assetType = AssetDatabase.GetMainAssetTypeAtPath(path);
+                    bool isValidPrefab = assetType == typeof(GameObject);
+                    if (!isValidPrefab)
                     {
-                        Debug.Log($"Found text components");
-                        
-                        foreach (var textComponent in textComponents)
+                        Debug.Log($"<color=yellow>Rejected {assetType} at {path}</color>");
+                        continue;
+                    }
+                    Debug.Log($"{path}");
+                    using (var editScope = new EditPrefabAssetScope(path))
+                    {
+                        GameObject root = editScope.prefabRoot;
+
+                        if (root.TryGetComponentsInChildren<TextMeshProUGUI>(out List<TextMeshProUGUI> textComponents, skipNestedPrefabs: true))
                         {
-                            (_onComponentField.value as OnComponentFound<TextMeshProUGUI>).DoOnFoundComponent(textComponent);
+                            Debug.Log($"Found text components");
+
+                            foreach (var textComponent in textComponents)
+                            {
+                                (_onComponentField.value as OnComponentFound<TextMeshProUGUI>).DoOnFoundComponent(textComponent);
+                            }
+
+                            editScope.SavePrefabOnDispose = true;
+                        }
+                        else
+                        {
+                            editScope.SavePrefabOnDispose = false;
                         }
                     }
                 }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError(ex.Message + "\n" + ex.StackTrace);
+            }
+            finally
+            {
+                AssetDatabase.StopAssetEditing();
             }
         }
 
