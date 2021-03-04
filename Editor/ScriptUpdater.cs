@@ -113,7 +113,7 @@ namespace FabulousReplacer
                     //! another hack here
                     FieldInformation[] unupdatedFieldInformation = distinctTextFieldInformations
                         .Where(fi => {
-                            string fieldPattern = @$"// field: {fi.FieldDeclaringType}.{fi.FieldName}";
+                            string fieldPattern = $"// field: {fi.FieldDeclaringType}.{fi.FieldName}";
                             if (DoesScriptContain(path, fieldPattern))
                             {
                                 Debug.Log($"Filtered out a thingy: {path} already contained {fieldPattern}");
@@ -123,14 +123,31 @@ namespace FabulousReplacer
                         })
                         .ToArray();
 
+                    List<string> upff = new List<string>();
+
+                    List<FieldInformation> likeReally = new List<FieldInformation>();
+
+                    foreach (var uhh in unupdatedFieldInformation)
+                    {
+                        if (upff.Contains(uhh.FieldName))
+                        {
+                            Debug.Log($"hmmmmm already contained // field: {uhh.FieldDeclaringType}.{uhh.FieldName}");
+                        }
+                        else
+                        {
+                            likeReally.Add(uhh);
+                            upff.Add(uhh.FieldName);
+                        }
+                    }
+
                     if (!scriptLinesByPath.ContainsKey(path))
                     {
                         scriptLinesByPath.Add(path, new List<string>());
-                        scriptLinesByPath[path] = GetUpdatedScriptLines(path, fieldDefiningType, fieldType, unupdatedFieldInformation);
+                        scriptLinesByPath[path] = GetUpdatedScriptLines(path, fieldDefiningType, fieldType, likeReally.ToArray());
                     }
                     else
                     {
-                        scriptLinesByPath[path] = UpdateReplacerRegion(scriptLinesByPath[path], fieldType, unupdatedFieldInformation);
+                        scriptLinesByPath[path] = UpdateReplacerRegion(scriptLinesByPath[path], fieldType, likeReally.ToArray());
                     }
                 }
 
