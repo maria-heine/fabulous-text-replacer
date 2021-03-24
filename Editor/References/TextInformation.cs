@@ -100,16 +100,9 @@ namespace FabulousReplacer
             tmProText.characterSpacing = 0f;
             tmProText.lineSpacing = LineSpacing;
             tmProText.enableWordWrapping = Wrapping;
-
-            // * Thats a tiny trick to help us match fonts to similar size
-            tmProText.enableAutoSizing = true;
-
-            // TODO oki that is a small hack
-            // using original font size as max size and always enabling auto sizing
-            tmProText.fontSizeMax = FontSize;
-            //newText.enableAutoSizing = AutoSize;
+            tmProText.enableAutoSizing = AutoSize;
+            tmProText.fontSizeMax = MaxSize;
             tmProText.fontSizeMin = MinSize;
-
         }
     }
 }
